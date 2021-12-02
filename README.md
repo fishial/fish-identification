@@ -37,7 +37,7 @@ $ pip3 install -r requirements.txt
 
 * [train_copy_paste.py](train_scripts/segmentation/train_copy_paste.py) is the basic set up script to train segmentation model using Detectrin2 API with Copy Paste Augumentation.
 
-* ([model.py](module/classification_package/src/model.py), [utils.py](module/classification_package/src/utils.py), [config.py](mrcnn/config.py)): These files contain the main classification pipline implementation.
+* ([model.py](module/classification_package/src/model.py), [utils.py](module/classification_package/src/utils.py)): These files contain the main classification pipline implementation.
 
 ## Models
 
