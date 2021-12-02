@@ -1,0 +1,13 @@
+.center {
+border: 5px solid #FFFF00;
+text-align: center;
+}
+
+table {text-align: center;}
+table thead th {text-align: center;}
+
+table
+{
+margin-left: auto;
+margin-right: auto;
+}
