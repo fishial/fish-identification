@@ -4,6 +4,8 @@ This project includes training and validation scripts for the fish segmentation 
 
 [Demo web aplication](https://portal.fishial.ai/search)
 
+Project website: www.fishial.ai
+
 ## Installation
 
 Install the dependencies.
