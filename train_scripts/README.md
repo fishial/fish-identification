@@ -157,6 +157,9 @@ Score Table:
 | Lutjanus analis | 1.00 | 1.00 | 1.00 | 7 |
 | Cyprinus rubrofuscus | 0.60 | 1.00 | 0.75 | 6 |
 
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;The results show that the model does a poor job with a certain class, the number of images of which is small. 
+
+---
 
 <p float="left">
   <img src="https://fishial.ai/static/fishial_logo-2c651a547f55002df228d91f57178377.png" height="40" />
