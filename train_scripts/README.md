@@ -32,7 +32,7 @@ Image distribution:
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;As we can observe in a chart below, our dataset has imbalanced data, some classes have more than 5 times more images than others, so to make a less sensitive to imbalanced dataset we apply BalancedBatchSampler.  By specifying count classes and images per class our sampler will generate a batch which will have specifically an exact amount of samples.
 
 This class you can find here.
-* [utils.py/BalancedBatchSampler](module/classification_package/src/dataset.py): This file contain realization of BalancedBatchSampler class.
+* [dataset.py/BalancedBatchSampler](../module/classification_package/src/dataset.py): This file contain realization of BalancedBatchSampler class.
 
 ---
 
@@ -73,7 +73,7 @@ model, opt = amp.initialize(models=model,
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[Triplet loss](https://arxiv.org/pdf/1503.03832.pdf) network, is a common approach to retrieve images from a given set. Overall accuracy was pretty well on a validation set, additional advantages is adding new sample to dataset could improve ability to classification, but generally system had poore accuracy with small count images in classes. Quadruplet loss realized from [this paper](https://arxiv.org/pdf/1704.01719.pdf). 
 
 Realization: 
-* [Triplet, Quadruplet loss](module/classification_package/src/loss_functions.py): This files contain realization of Triplet and Qudruplet loss class.
+* [Triplet, Quadruplet loss](../module/classification_package/src/loss_functions.py): This files contain realization of Triplet and Qudruplet loss class.
 
 #### Cross entropy
 
