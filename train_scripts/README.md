@@ -4,6 +4,8 @@ This notebook shows insights of training experiments.
 
 ---
 
+![Animation](../imgs/boardProjector.gif)
+
 ### Data
 
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;At the moment, the fish collection contains more than 4000 images with around 10,000 polygons of fish for the task of instance segmentation, including around 60 species of fish with more than 10 polygons per class.
@@ -160,6 +162,16 @@ Score Table:
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;The results show that the model does a poor job with a certain class, the number of images of which is small. 
 
 ---
+
+### Embedding Train 
+
+For training **embedding network**, was used qudruplet loss function, in general that loss show pretty good results, and clasterizing was also good enough. Here we can observe few examples of which classes was most similar to target class.
+
+ ![](../imgs/sim/1.png)
+ ![](../imgs/sim/2.png)
+ ![](../imgs/sim/3.png)
+ ![](../imgs/sim/4.png)  
+ 
 
 <p float="left">
   <img src="https://fishial.ai/static/fishial_logo-2c651a547f55002df228d91f57178377.png" height="40" />

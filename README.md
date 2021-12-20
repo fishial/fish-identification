@@ -48,7 +48,8 @@ $ pip3 install -r requirements.txt
 | MaskRCNN Fish Segmentation  | [link](https://storage.googleapis.com/fishial-ml-resources/detectron2_new_version.pth) |
 | ResNet18 Fish Classification  | [link](https://storage.googleapis.com/fishial-ml-resources/final_cross_cross_entropy_0.9923599320882852_258571.0.ckpt) |
 
-## Train Results
+## [Train results](train_scripts/README.md)
+
 
 Segmentation model has validated by mAP metric.
 
