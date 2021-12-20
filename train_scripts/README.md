@@ -171,7 +171,13 @@ For training **embedding network**, was used qudruplet loss function, in general
  ![](../imgs/sim/2.png)
  ![](../imgs/sim/3.png)
  ![](../imgs/sim/4.png)  
+ ![](../imgs/sim/5.png)  
  
+In order to select similar fish species on the entire dataset, the following steps were used:
+1. The choice of the number of nearest neighbors is 2 times more than the maximum number of images of this class in the dataset, we do this in order to have a certain number of closest fish species.
+2. Selection of fish species that were found more often than 15% of the total number of fish for the selected class, thereby choosing the most similar classes.
+As we can see, the algorithm selects fairly similar species,
+
 
 <p float="left">
   <img src="https://fishial.ai/static/fishial_logo-2c651a547f55002df228d91f57178377.png" height="40" />
