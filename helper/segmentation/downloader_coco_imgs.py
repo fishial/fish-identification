@@ -12,7 +12,7 @@ def find_image_by_id(id: int):
             return i
 
 
-f = open('fishial_collection_correct.json',)
+f = open('data/export.json',)
 data = json.load(f)
 f.close()
 
@@ -24,15 +24,15 @@ def download(url):
 
 folder_name = "fishial_collection"
 os.makedirs(folder_name, exist_ok=True)
-os.makedirs("{}/Train".format(folder_name), exist_ok=True)
-os.makedirs("{}/Test".format(folder_name), exist_ok=True)
+os.makedirs("{}/data".format(folder_name), exist_ok=True)
 list_sd = []
 urls = []
 for i in tqdm(range(len(data['images']))):
-    if 'train_data' not in data['images'][i]:
-        continue
+    # if 'train_data' not in data['images'][i]:
+    #     continue
+    # print("tut")
     list_sd.append(data['images'][i]['file_name'])
-    folder_type = 'Train' if data['images'][i]['train_data'] else 'Test'
+    folder_type = 'data'
     path = os.path.join(os.path.join(folder_name, folder_type), data['images'][i]['file_name'])
     urls.append([data['images'][i]['coco_url'], path, i])
 

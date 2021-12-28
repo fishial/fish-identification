@@ -9,6 +9,7 @@ from PIL import Image
 from torchvision import transforms
 from torch import nn
 
+
 class Backbone(nn.Module):
     def __init__(self, resnet: nn.Module):
         super().__init__()
@@ -33,9 +34,9 @@ class FcNet(nn.Module):
 
 class ClassifierFC:
 
-    def __init__(self, model_path, device='cpu'):
+    def __init__(self, model_path, n_classes=61, device='cpu'):
         self.device = device
-        self.softmax = nn.Softmax(dim=None)
+        self.softmax = nn.Softmax(dim=1)
         start_time = time.time()
         # Setup logging
         logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s - %(message)s',
@@ -49,7 +50,7 @@ class ClassifierFC:
 
         backbone = Backbone(resnet18)
 
-        self.model = FcNet(backbone, 61)
+        self.model = FcNet(backbone, n_classes)
         self.model.load_state_dict(torch.load(self.model_path, map_location=torch.device(device)))
         self.model.eval()
         self.model.to(device)
@@ -66,18 +67,17 @@ class ClassifierFC:
         start_time = time.time()
         dump = self.softmax(self.model(image.unsqueeze(0)))
         output = torch.topk(dump, top_k)
-#         logging.info(
-#             "Inference time by classification model has taken {} [s]".format(round(time.time() - start_time, 2)))
+        #         logging.info(
+        #             "Inference time by classification model has taken {} [s]".format(round(time.time() - start_time, 2)))
         return [[int(output.indices[0][match]), round(float(output.values[0][match]), 5)] for match in
                 range(len(output.indices[0]))]
-    
+
     def inference_numpy(self, img, top_k=6):
         image = Image.fromarray(img)
         image = self.loader(image).float()
         image = torch.tensor(image)
-        return self.inference_tensor(image, top_k)
+        return self.inference(image, top_k)
 
-    
     def batch_inference(self, imgs, top_k=6):
         start_time = time.time()
         batch_input = []
