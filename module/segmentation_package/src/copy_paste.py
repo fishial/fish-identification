@@ -26,6 +26,7 @@ def mask_copy_paste(mask, paste_mask, alpha):
 def masks_copy_paste(masks, paste_masks, alpha):
     if alpha is not None:
         # eliminate pixels that will be pasted over
+
         masks = [
             np.logical_and(mask, np.logical_xor(mask, alpha)).astype(np.uint8) for mask in masks
         ]

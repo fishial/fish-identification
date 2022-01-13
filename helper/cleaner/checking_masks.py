@@ -44,7 +44,6 @@ class ImageReader:
         self.onlyfiles = [f for f in listdir(self.cash_folder) if isfile(join(self.cash_folder, f))]
         print(f"Files {self.onlyfiles}")
 
-
     def get_image(self, image):
         return self.__image_reader_local(image['file_name']) if self.data_local else self.__image_reader_url(image['coco_url'], image['file_name'])
 

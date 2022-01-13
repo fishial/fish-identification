@@ -31,8 +31,14 @@ def get_current_date_in_format():
     return now.strftime("%d_%m_%Y_%H_%M_%S")
 
 
+def get_image_class(data, image_id):
+    for i in data['images']:
+        if i['id'] == image_id:
+            return i
+
+
 def get_dataset_dicts(img_dir, state, json_file="fishial_collection_correct.json"):
-    json_file = os.path.join(img_dir, json_file)
+    json_file = json_file
     with open(json_file) as f:
         data = json.load(f)
 
@@ -41,46 +47,61 @@ def get_dataset_dicts(img_dir, state, json_file="fishial_collection_correct.json
         if i['name'] == 'General body shape':
             bodyes_shapes_ids.append(int(i['id']))
 
-    dataset_dicts = []
+    skip_data = []
+    full_data = {}
+    for indices, ann in enumerate(data['annotations']):
+        print(f"Left: {len(data['annotations']) - indices}")
 
-    img_dir = os.path.join(img_dir, state)
-    for i in tqdm(range(len(data['images']))):
-        if 'train_data' in data['images'][i]:
-            
-            state_json = 'Train' if data['images'][i]['train_data'] else 'Test'
+        if ann['image_id'] in skip_data: continue
+        if ann['image_id'] not in full_data:
+            image_class = get_image_class(data, ann['image_id'])
 
-            if state != state_json:
-                continue
+            if 'train_data' in image_class:
+                state_json = 'Train' if image_class['train_data'] else 'Test'
+                if state != state_json:
+                    skip_data.append(ann['image_id'])
+                    continue
+
             record = {}
-            filename = os.path.join(img_dir, data['images'][i]['file_name'])
-            width, height = cv2.imread(filename).shape[:2]
+            filename = os.path.join(img_dir, image_class['file_name'])
+            try:
+                width, height = cv2.imread(filename).shape[:2]
+            except:
+                print("error: ", filename)
+                continue
             record["file_name"] = filename
             record["height"] = width
             record["width"] = height
-            record["image_id"] = i
+            record["image_id"] = ann['image_id']
+            record["annotations"] = []
 
-            objs = []
+            full_data.update({ann['image_id']: record})
 
-            for ann in data['annotations']:
-                if 'segmentation' in ann and ann['image_id'] == data['images'][i]['id'] and ann[
-                    'category_id'] in bodyes_shapes_ids:
-                    px = []
-                    py = []
-                    for z in range(int(len(ann['segmentation'][0]) / 2)):
-                        px.append(ann['segmentation'][0][z * 2])
-                        py.append(ann['segmentation'][0][z * 2 + 1])
+        if 'segmentation' in ann and ann['category_id'] in bodyes_shapes_ids:
+            if 'skip' in ann:
+                continue
 
-                    obj = {
-                        "bbox": [np.min(px).tolist(), np.min(py).tolist(), np.max(px).tolist(), np.max(py).tolist()],
-                        "bbox_mode": BoxMode.XYXY_ABS,
-                        "segmentation": ann['segmentation'],
-                        "category_id": 0,
-                        "iscrowd": 0
-                    }
-                    objs.append(obj)
-            record["annotations"] = objs
-            dataset_dicts.append(record)
+            px = []
+            py = []
+            for z in range(int(len(ann['segmentation'][0]) / 2)):
+                px.append(ann['segmentation'][0][z * 2])
+                py.append(ann['segmentation'][0][z * 2 + 1])
+
+            obj = {
+                "bbox": [np.min(px).tolist(), np.min(py).tolist(), np.max(px).tolist(), np.max(py).tolist()],
+                "bbox_mode": BoxMode.XYXY_ABS,
+                "segmentation": ann['segmentation'],
+                "category_id": 0,
+                "iscrowd": 0
+            }
+
+            full_data[ann['image_id']]["annotations"].append(obj)
+    dataset_dicts = []
+    for i in full_data:
+        dataset_dicts.append(full_data[i])
+
     return dataset_dicts
+
 
 def get_dataset_dicts_sep(img_dir, json_file):
     

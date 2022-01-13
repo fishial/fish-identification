@@ -12,7 +12,8 @@ import albumentations as A
 # copy paste source
 from module.segmentation_package.src.copy_paste import CopyPaste
 from module.segmentation_package.src.coco import CocoDetectionCP
-from module.segmentation_package.src.utils import get_dataset_dicts_sep
+from module.segmentation_package.src.CopyPasteCustom import apply_copy_paste_aug, get_copy_paste_instance
+from module.segmentation_package.src.utils import get_dataset_dicts_sep, get_dataset_dicts
 
 from pycocotools import mask
 from skimage import measure
@@ -30,32 +31,19 @@ from detectron2.structures import BoxMode
 setup_logger()
 
 DatasetCatalog.clear()
-for d in ["Train", "Test"]:
-    DatasetCatalog.register("fishial_" + d,
-                            lambda d=d: get_dataset_dicts_sep(
-                                "../fishial_collection/{}".format(d),
-                                json_file='../fishial_collection/data_{}.json'.format(d)))
-    MetadataCatalog.get("fishial_" + d).set(thing_classes=["fish"], evaluator_type="coco")
+
+dataset_train = get_dataset_dicts('data/cache', 'Train', json_file="data/export.json")
+data_valid_ann = get_copy_paste_instance(dataset_train)
+
+DatasetCatalog.register("fishial_Train", dataset_train)
+MetadataCatalog.get("fishial_Train").set(thing_classes=["fish"], evaluator_type="coco")
+
+dataset_test = get_dataset_dicts('data/cache', 'Test', json_file="data/export.json")
+DatasetCatalog.register("fishial_Test", dataset_train)
+MetadataCatalog.get("fishial_Test").set(thing_classes=["fish"], evaluator_type="coco")
 
 dataset_dicts_train = DatasetCatalog.get("fishial_Train")
 train_metadata = MetadataCatalog.get("fishial_Train")
-
-aug_list = [A.Resize(1280, 1280), A.OneOf([A.HorizontalFlip(), A.RandomRotate90()], p=0.75),
-            CopyPaste(blend=True, pct_objects_paste=0.8, p=1.)  # pct_objects_paste is a guess
-            ]
-
-transform = A.Compose(
-    aug_list, bbox_params=A.BboxParams(format="coco"))
-data = CocoDetectionCP(
-    '/home/codahead/UntitledFolder/fishial_collection/Train',
-    '/home/codahead/UntitledFolder/fishial_collection/data_Train.json',
-    transform)
-
-data_id_to_num = {i: q for q, i in enumerate(data.ids)}
-ALL_IDS = list(data_id_to_num.keys())
-dataset_dicts_train = [i for i in dataset_dicts_train if i['image_id'] in ALL_IDS]
-BOX_MODE = dataset_dicts_train[0]['annotations'][0]['bbox_mode']
-images_top = {}
 
 
 class MyMapper:
@@ -71,19 +59,10 @@ class MyMapper:
     def __call__(self, dataset_dict):
         torch.cuda.empty_cache()
         dataset_dict = copy.deepcopy(dataset_dict)  # it will be modified by code below
-        base_name = os.path.basename(dataset_dict["file_name"])
 
-        if base_name in images_top:
-            images_top[base_name] += 1
-            print("{}:{}".format(dataset_dict["file_name"], images_top[base_name]))
-        else:
-            images_top.update({base_name: 1})
-
-        img_id = dataset_dict['image_id']
-        aug_sample = data[data_id_to_num[img_id]]
+        aug_sample = apply_copy_paste_aug(dataset_dict, data_valid_ann)
 
         image = aug_sample['image']
-
         image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
 
         dataset_dict["image"] = torch.as_tensor(image.transpose(2, 0, 1).astype("float32"))
