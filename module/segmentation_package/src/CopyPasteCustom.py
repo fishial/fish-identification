@@ -1,8 +1,29 @@
 import cv2
-import json
+import matplotlib.pyplot as plt
+import numpy as np
+import os, json
 from shapely.geometry import Polygon
 import random
+import os
+import json
+import copy
+from tqdm import tqdm
+import cv2
 import numpy as np
+from os import listdir
+from os.path import isfile, join
+import cv2
+import matplotlib.pyplot as plt
+import numpy as np
+import os, json
+from shapely.geometry import Polygon
+import random
+import imutils
+import numpy as np
+from PIL import Image
+from module.segmentation_package.src.visualize import display_instances
+from module.segmentation_package.src.utils import get_dataset_dicts
+from pycocotools import mask
 
 
 def get_image_class(data, image_id):
@@ -40,7 +61,7 @@ def get_mask(image, segm):
 
     ## (3) do bit-op
     dst = cv2.bitwise_and(croped, croped, mask=croped_binary_mask)
-    return dst, croped_binary_mask, rect
+    return dst, croped_binary_mask, rect, polygon
 
 
 def get_images(instance):
@@ -49,13 +70,14 @@ def get_images(instance):
 
     img_full = cv2.imread(file_name)
     img_full = cv2.cvtColor(img_full, cv2.COLOR_BGR2RGB)
-    full_mask, binary_mask, rect = get_mask(img_full, segmentation)
+    full_mask, binary_mask, rect, pts = get_mask(img_full, segmentation)
     x, y, w, h = rect  # [y:y + h, x:x + w] #[rect[1]:rect[1] + rect[3], rect[0]:rect[0] + rect[2]]
     return {
         'image_full': img_full,
         'full_mask': full_mask,
         'binary_mask': binary_mask,
-        'rect': [max(0, x), max(0, y), w, h]
+        'rect': [max(0, x), max(0, y), w, h],
+        'segmentation': pts
     }
 
 
@@ -72,7 +94,8 @@ def get_images_from_instance(data_instance, dst_size=(1440, 1440)):
         'image_full': img_full,
         'full_mask': [],
         'binary_mask': [],
-        'rect': []
+        'rect': [],
+        'segmentation': []
     }
 
     for i in data_instance['annotations']:
@@ -80,11 +103,12 @@ def get_images_from_instance(data_instance, dst_size=(1440, 1440)):
         for poin_seg in range(int(len(i['segmentation'][0]) / 2)):
             new_segm_points.append(i['segmentation'][0][2 * poin_seg] / scale[1])
             new_segm_points.append(i['segmentation'][0][2 * poin_seg + 1] / scale[0])
-        full_mask, binary_mask, rect = get_mask(img_full, new_segm_points)
+        full_mask, binary_mask, rect, pts = get_mask(img_full, new_segm_points)
         x, y, w, h = rect  # [y:y + h, x:x + w] #[rect[1]:rect[1] + rect[3], rect[0]:rect[0] + rect[2]]
         img_data['full_mask'].append(full_mask)
         img_data['binary_mask'].append(binary_mask)
         img_data['rect'].append([max(0, x), max(0, y), w, h])
+        img_data['segmentation'].append(pts)
 
     return img_data
 
@@ -203,6 +227,7 @@ def rotate_image(image, angle):
     rotated = cv2.warpAffine(image, M, (w, h))
     return rotated
 
+
 def overlay_image_alpha(img, img_overlay, x, y, alpha_mask):
     """Overlay `img_overlay` onto `img` at (x, y) and blend using `alpha_mask`.
 
@@ -229,10 +254,15 @@ def overlay_image_alpha(img, img_overlay, x, y, alpha_mask):
     return img_crop
 
 
-def apply_mask(src, src_mask_origin, color_mask, binary_mask, angle, box, min_ratio=0.025):
+def apply_mask(src, src_mask_origin, color_mask, binary_mask, angle, box, polygon, min_ratio=0.025):
     if angle != 1:
         color_mask = cv2.rotate(color_mask, cv2.cv2.ROTATE_90_CLOCKWISE)
         binary_mask = cv2.rotate(binary_mask, cv2.cv2.ROTATE_90_CLOCKWISE)
+        w, h = color_mask.shape[:2]
+        for p_a in range(len(polygon)):
+            tmp_x, tmp_y = polygon[p_a][0], polygon[p_a][1]
+            polygon[p_a][0] = h - tmp_y
+            polygon[p_a][1] = tmp_x
 
     mask_size = binary_mask.shape[:2]
 
@@ -244,6 +274,10 @@ def apply_mask(src, src_mask_origin, color_mask, binary_mask, angle, box, min_ra
         scaling = scaling * 0.95
         color_mask = resize_image(color_mask, scaling)
         binary_mask = resize_image(binary_mask, scaling)
+
+        for p_a in range(len(polygon)):
+            polygon[p_a][0] = int(polygon[p_a][0] * scaling)
+            polygon[p_a][1] = int(polygon[p_a][1] * scaling)
 
     mask_size = binary_mask.shape[:2]
 
@@ -274,7 +308,11 @@ def apply_mask(src, src_mask_origin, color_mask, binary_mask, angle, box, min_ra
     offset[0]:offset[0] + binary_mask_croped.shape[1]] = binary_mask_croped
     paste_rect = [offset[0], offset[1], binary_mask_croped.shape[1], binary_mask_croped.shape[0]]
 
-    return True, src, zeros_matrix, paste_rect
+    for p_a in range(len(polygon)):
+        polygon[p_a][0] = polygon[p_a][0] + offset[0]
+        polygon[p_a][1] = polygon[p_a][1] + offset[1]
+
+    return True, zeros_matrix, paste_rect, polygon
 
 
 def apply_copy_paste_aug(target_instance, data_valid_paste):
@@ -286,19 +324,16 @@ def apply_copy_paste_aug(target_instance, data_valid_paste):
     ix = 0
     img_data = {
         'image': src,
-        'bboxes': [],
-        'masks': []
+        'segmentation': []
     }
 
     for id_current in range(len(target['rect'])):
         rectangles.append(target['rect'][id_current])
         b_box = [target['rect'][id_current][0], target['rect'][id_current][1], target['rect'][id_current][2],
                  target['rect'][id_current][3]]
-
-        img_data['bboxes'].append(b_box + [0] + [ix])
-        img_data['masks'].append(target['binary_mask'][id_current].copy())
+        img_data['segmentation'].append(target['segmentation'][id_current])
         ix += 1
-    if len(img_data['bboxes']) > 1: return img_data
+    if len(img_data['segmentation']) > 1: return img_data
 
     paste_aug = random.sample(data_valid_paste, random.randint(1, 5))
 
@@ -329,15 +364,24 @@ def apply_copy_paste_aug(target_instance, data_valid_paste):
                          rect_aug[0]:rect_aug[0] + rect_aug[2]].copy()
             binary_mask = aug_img['binary_mask'][rect_aug[1]:rect_aug[1] + rect_aug[3],
                           rect_aug[0]:rect_aug[0] + rect_aug[2]].copy()
-            statet, src, binary_mask_origin, paste_rect = apply_mask(src, src_mask_origin, color_mask, binary_mask,
-                                                                     angle, i)
+
+            # Perfom that in preprocess function
+            for p_a in range(len(aug_img['segmentation'])):
+                aug_img['segmentation'][p_a][0] = aug_img['segmentation'][p_a][0] - rect_aug[0]
+                aug_img['segmentation'][p_a][1] = aug_img['segmentation'][p_a][1] - rect_aug[1]
+
+            statet, binary_mask_origin, paste_rect, poly = apply_mask(src, src_mask_origin, color_mask, binary_mask,
+                                                                      angle, i, aug_img['segmentation'])
             if not statet: continue
-            b_box = [paste_rect[0], paste_rect[1], paste_rect[2], paste_rect[3]]
-            img_data['bboxes'].append(b_box + [0] + [ix])
-            img_data['masks'].append(binary_mask_origin.copy())
+            #             b_box = [paste_rect[0], paste_rect[1], paste_rect[2], paste_rect[3]]
+            #             img_data['bboxes'].append(b_box + [0] + [ix])
+
+            #             img_data['masks'].append(binary_mask_origin.copy())
+            img_data['segmentation'].append(poly)
             rectangles.append(paste_rect)
             ix += 1
-        except:
+        except Exception as e:
+            print(f"error: {e}")
             pass
 
     return img_data

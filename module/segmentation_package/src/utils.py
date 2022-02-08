@@ -50,23 +50,31 @@ def get_dataset_dicts(img_dir, state, json_file="fishial_collection_correct.json
     skip_data = []
     full_data = {}
     for indices, ann in enumerate(data['annotations']):
-        print(f"Left: {len(data['annotations']) - indices}")
+        print(f"Left: {len(data['annotations']) - indices} skip: {len(skip_data)}", end='\r')
 
         if ann['image_id'] in skip_data: continue
         if ann['image_id'] not in full_data:
             image_class = get_image_class(data, ann['image_id'])
 
-            if 'train_data' in image_class:
-                state_json = 'Train' if image_class['train_data'] else 'Test'
-                if state != state_json:
+            if 'fishial_extra' not in image_class:
+                skip_data.append(ann['image_id'])
+                continue
+
+            if 'test_image' in image_class['fishial_extra']:
+
+                state_json = 'Test' if image_class['fishial_extra']['test_image'] else 'Train'
+                if state != state_json and state != 'Full':
                     skip_data.append(ann['image_id'])
                     continue
-
+            else:
+                skip_data.append(ann['image_id'])
+                continue
             record = {}
             filename = os.path.join(img_dir, image_class['file_name'])
             try:
                 width, height = cv2.imread(filename).shape[:2]
             except:
+
                 print("error: ", filename)
                 continue
             record["file_name"] = filename
@@ -79,6 +87,8 @@ def get_dataset_dicts(img_dir, state, json_file="fishial_collection_correct.json
 
         if 'segmentation' in ann and ann['category_id'] in bodyes_shapes_ids:
             if 'skip' in ann:
+                print("Skip")
+                skip_cnt += 1
                 continue
 
             px = []
@@ -87,8 +97,9 @@ def get_dataset_dicts(img_dir, state, json_file="fishial_collection_correct.json
                 px.append(ann['segmentation'][0][z * 2])
                 py.append(ann['segmentation'][0][z * 2 + 1])
 
+            bbox = [np.min(px).tolist(), np.min(py).tolist(), np.max(px).tolist(), np.max(py).tolist()]
             obj = {
-                "bbox": [np.min(px).tolist(), np.min(py).tolist(), np.max(px).tolist(), np.max(py).tolist()],
+                "bbox": bbox,
                 "bbox_mode": BoxMode.XYXY_ABS,
                 "segmentation": ann['segmentation'],
                 "category_id": 0,
@@ -98,13 +109,13 @@ def get_dataset_dicts(img_dir, state, json_file="fishial_collection_correct.json
             full_data[ann['image_id']]["annotations"].append(obj)
     dataset_dicts = []
     for i in full_data:
-        dataset_dicts.append(full_data[i])
+        if len(full_data[i]["annotations"]) > 0:
+            dataset_dicts.append(full_data[i])
 
     return dataset_dicts
 
 
 def get_dataset_dicts_sep(img_dir, json_file):
-    
     with open(json_file) as f:
         data = json.load(f)
 
@@ -117,7 +128,7 @@ def get_dataset_dicts_sep(img_dir, json_file):
 
     for i in tqdm(range(len(data['images']))):
         if 'train_data' in data['images'][i]:
-     
+
             record = {}
             filename = os.path.join(img_dir, data['images'][i]['file_name'])
             width, height = cv2.imread(filename).shape[:2]
