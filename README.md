@@ -2,7 +2,7 @@
 
 This project includes training and validation scripts for the fish segmentation and classification model.
 
-[Demo web aplication](https://portal.fishial.ai/search)
+[Demo web aplication](https://portal.fishial.ai/search/by-fishial-recognition)
 
 Project website: www.fishial.ai
 
