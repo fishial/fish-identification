@@ -27,13 +27,19 @@ $ pip3 install -r requirements.txt
 
 * ([model.py](module/classification_package/src/model.py), [utils.py](module/classification_package/src/utils.py)): These files contain the main classification pipline implementation.
 
+* [CreateDataBaseTensor.py](helper/classification/CreateDataBaseTensor.py): This script is designed to get the attachment tensor for a trained neural network, the resulting tensor has dimensions {number of classes * maximum number of images for one class * embedding dimension} for classes in which the number of attachments is less than in the maximum class, a tensor with a value of 100 is added in order not to affect for inference
+
+* [CreateDatasetAndTrain.py](helper/classification/CreateDatasetAndTrain.ipynb): This script allows you to create a training and test data set from the exported fishial coco file and train the neural network
+
 ## Models
 
 | Model | link  |
 | ------------- | ------------- |
 | MaskRCNN Fish Segmentation  | [link](https://storage.googleapis.com/fishial-ml-resources/detectron2_new_version.pth) |
-| ResNet18 Fish Classification  | [link](https://storage.googleapis.com/fishial-ml-resources/final_cross_cross_entropy_0.9923599320882852_258571.0.ckpt) |
+| ResNet18 Fish Classification Cross Entropy V1.0 | [link](https://storage.googleapis.com/fishial-ml-resources/final_cross_cross_entropy_0.9923599320882852_258571.0.ckpt) |
 | ResNet18 Binary Classification  | [link](https://storage.cloud.google.com/fishial-ml-resources/binary_class.ckpt) |
+| ResNet18 Fish Classification Embedding 200 V2.0  | [link](https://storage.googleapis.com/fishial-ml-resources/new_embedding_bs_25_3.ckpt) |
+| ResNet18 DataBase Tensor  | [link](https://storage.googleapis.com/fishial-ml-resources/data_train_test.json_embedding.pt) |
 
 
 ## [Train results](train_scripts/README.md)

@@ -12,10 +12,10 @@ class Backbone(nn.Module):
 
 
 class EmbeddingModel(nn.Module):
-    def __init__(self, backbone: nn.Module, emb_dim=128):
+    def __init__(self, backbone: nn.Module,last_layer = 512, emb_dim=128):
         super().__init__()
         self.backbone = backbone
-        self.embeddings = nn.Linear(512, emb_dim)
+        self.embeddings = nn.Linear(last_layer, emb_dim)
         self.softmax = nn.Softmax()
 
     def forward(self, x: torch.Tensor):

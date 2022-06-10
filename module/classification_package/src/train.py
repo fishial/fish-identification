@@ -21,13 +21,12 @@ def simple_accuracy(preds, labels):
 
 
 def train(scheduler, t_total: int, opt: Optimizer, model: nn.Module, data_loader: DataLoader, ds_val: FishialDataset,
-          device: torch.device, writer: SummaryWriter, metrics: list, loss_fn: nn.Module, logger,
-          output_folder="output", eval_every = None):
-    
+          device: torch.device, metrics: list, loss_fn: nn.Module, logger,
+          output_folder="output", eval_every=None, file_name="best_score"):
     losses = AverageMeter()
     model = model.to(device)
-    top_acc_1 = 0.92
-    top_epoch, global_step = 0.0,0.0
+    top_acc_1 = 0.2
+    top_epoch, global_step = 0.0, 0.0
     step = 0
     gradient_accumulation_steps = 1
     max_grad_norm = 1.0
@@ -44,7 +43,7 @@ def train(scheduler, t_total: int, opt: Optimizer, model: nn.Module, data_loader
         epoch_iterator = tqdm(data_loader,
                               desc="Training (X / X Steps) (loss=X.X)",
                               bar_format="{l_bar}{r_bar}",
-                             disable=False)
+                              disable=False)
 
         all_preds, all_label = [], []
         for batch_idx, batch in enumerate(epoch_iterator):
@@ -82,11 +81,11 @@ def train(scheduler, t_total: int, opt: Optimizer, model: nn.Module, data_loader
                 epoch_iterator.set_description(
                     "Training (%d / %d Steps) (loss=%2.5f)" % (global_step, t_total, losses.val)
                 )
-                
+
                 if global_step % eval_every == 0:
                     logger.info("***** Running Validation *****")
                     logger.info("  Num steps = %d", len(ds_val))
-    
+
                     with torch.no_grad():
                         scores = evaluate(model=model, datasets=[data_loader.dataset, ds_val], metrics=metrics,
                                           device=device)
@@ -98,13 +97,12 @@ def train(scheduler, t_total: int, opt: Optimizer, model: nn.Module, data_loader
                     val_acc = 1.0
                     for score in scores:
                         for a_idx, a in enumerate(scores[score]):
-                            writer.add_scalar(score + str(a_idx), a, global_step)
+                            #                             writer.add_scalar(score + str(a_idx), a, global_step)
                             if val_acc > a: val_acc = a
-                    if top_acc_1 < val_acc:
+                    if top_acc_1 <= val_acc:
                         top_acc_1 = val_acc
                         save_checkpoint(model, os.path.join(output_folder,
-                                                            "final_cross_{}_{}_{}.ckpt".format('cross_entropy',
-                                                                                             top_acc_1, global_step)))
+                                                            f'{file_name}.ckpt'))
                     if top_epoch < val_acc: top_epoch = val_acc
 
                     logger.info("best accuracy so far: %f" % top_epoch)
@@ -119,11 +117,6 @@ def train(scheduler, t_total: int, opt: Optimizer, model: nn.Module, data_loader
         train_accuracy = accuracy.detach().cpu().numpy()
         logger.info("train accuracy so far: %f" % train_accuracy)
         losses.reset()
-        if top_acc_1 < train_accuracy:
-            top_acc_1 = train_accuracy
-            save_checkpoint(model, os.path.join(output_folder,
-                                                "final_cross_{}_{}_{}.ckpt".format('cross_entropy',
-                                                                                 top_acc_1, global_step)))
-                    
+
         if global_step % t_total == 0:
             break
