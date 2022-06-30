@@ -1,5 +1,23 @@
 import torch
 import torch.nn as nn
+import torchvision.models as models
+
+
+def init_model(config):
+    if config['model']['backbone'] == 'resnet18':
+        resnet = models.resnet18(pretrained=True)
+    elif config['model']['backbone'] == 'resnet50':
+        resnet = models.resnet50(pretrained=True)
+    else:
+        resnet = models.resnet18(pretrained=True)
+    cnt = resnet.fc.in_features
+
+    resnet.fc = nn.Identity()
+    embedding_model = EmbeddingModel(resnet, cnt, config['model']['embeddings'])
+
+    if config['checkpoint']:
+        embedding_model.load_state_dict(torch.load(config['checkpoint']))
+    return embedding_model
 
 
 class Backbone(nn.Module):
@@ -12,7 +30,7 @@ class Backbone(nn.Module):
 
 
 class EmbeddingModel(nn.Module):
-    def __init__(self, backbone: nn.Module,last_layer = 512, emb_dim=128):
+    def __init__(self, backbone: nn.Module, last_layer=512, emb_dim=128):
         super().__init__()
         self.backbone = backbone
         self.embeddings = nn.Linear(last_layer, emb_dim)

@@ -84,10 +84,10 @@ def train(scheduler, t_total: int, opt: Optimizer, model: nn.Module, data_loader
 
                 if global_step % eval_every == 0:
                     logger.info("***** Running Validation *****")
-                    logger.info("  Num steps = %d", len(ds_val))
+                    #                     logger.info("  Num steps = %d", len(ds_val))
 
                     with torch.no_grad():
-                        scores = evaluate(model=model, datasets=[data_loader.dataset, ds_val], metrics=metrics,
+                        scores = evaluate(model=model, datasets=[data_loader.dataset], metrics=metrics,
                                           device=device)
                     logger.info("\n")
                     logger.info("Validation Results")

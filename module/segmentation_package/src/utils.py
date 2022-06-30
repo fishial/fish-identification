@@ -37,15 +37,156 @@ def get_image_class(data, image_id):
             return i
 
 
-def get_dataset_dicts(img_dir, state, json_file="fishial_collection_correct.json"):
-    json_file = json_file
-    with open(json_file) as f:
-        data = json.load(f)
+def get_labels(json_file):
+    data = read_json(json_file)
 
     bodyes_shapes_ids = []
     for i in data['categories']:
         if i['name'] == 'General body shape':
-            bodyes_shapes_ids.append(int(i['id']))
+            bodyes_shapes_ids.append(i['supercategory'])
+    return bodyes_shapes_ids
+
+
+def get_anns_by_image_id(data, image_id):
+    anns = []
+    for ann_id in range(len(data['annotations']) - 1, -1, -1):
+        if data['annotations'][ann_id]['image_id'] == image_id:
+            anns.append(data['annotations'][ann_id])
+            del data['annotations'][ann_id]
+    return anns
+
+
+def get_sorted_data(data):
+    image_ids_dict = {}
+    for ann_id in range(len(data['annotations']) - 1, -1, -1):
+        print("Left Full: {}".format(len(data['annotations']) - ann_id), end='\r')
+        if data['annotations'][ann_id]['image_id'] in image_ids_dict:
+            image_ids_dict[data['annotations'][ann_id]['image_id']].append(data['annotations'][ann_id])
+        else:
+            image_ids_dict.update({
+                data['annotations'][ann_id]['image_id']: [data['annotations'][ann_id]]})
+    return image_ids_dict
+
+
+def get_prepared_data(img_dir, json_file, path_to_class):
+    data = read_json(json_file)
+    valid_labels = read_json(path_to_class)
+    local_id_dict = {valid_labels[label_id]: int(label_id) for label_id in valid_labels}
+
+    bodyes_shapes_ids = {}
+    for i in data['categories']:
+        if i['name'] == 'General body shape':
+            bodyes_shapes_ids.update({int(i['id']): i['supercategory']})
+
+    skip_data = []
+    tmp_data = {}
+    data_with_full_ann = get_sorted_data(data)
+
+    for indices, image_dict in enumerate(data['images']):
+        if image_dict['fishial_extra']['test_image'] or image_dict['fishial_extra']['xray'] or \
+                image_dict['fishial_extra'][
+                    'not_a_real_fish']:
+            continue
+
+        print(f"Left: {len(data['images']) - indices} skip: {len(skip_data)}", end='\r')
+        #         if indices > 1000: continue
+        if image_dict['id'] not in data_with_full_ann: continue
+        anns = data_with_full_ann[image_dict['id']]
+        if len(anns) == 0: continue
+
+        filename = os.path.join(img_dir, image_dict['file_name'])
+        #         try:
+        #             width, height = cv2.imread(filename).shape[:2]
+        #             data['images'][indices]['width'] = width
+        #             data['images'][indices]['height'] = height
+        #         except:
+        #             print("skip file read error: ", filename)
+        #             continue
+
+        if len(anns) == 0: continue
+
+        tmp_data.update({image_dict['id']: {
+
+            "file_name": filename,
+            "height": data['images'][indices]['width'],
+            "width": data['images'][indices]['height'],
+            "image_id": image_dict['id'],
+            "annotations": []
+        }})
+
+        for ann in anns:
+            if 'category_id' not in ann: continue
+            if 'segmentation' not in ann: continue
+            if ann['category_id'] not in bodyes_shapes_ids: continue
+
+            # some if conditional if we need manualy skip annotations
+            px = []
+            py = []
+            for z in range(int(len(ann['segmentation'][0]) / 2)):
+                px.append(ann['segmentation'][0][z * 2])
+                py.append(ann['segmentation'][0][z * 2 + 1])
+
+            bbox = [np.min(px).tolist(), np.min(py).tolist(), np.max(px).tolist(), np.max(py).tolist()]
+            obj = {
+                "bbox": bbox,
+                "bbox_mode": BoxMode.XYXY_ABS,
+                "segmentation": ann['segmentation'],
+                "category_id": 0,
+                "category_label": 'Fish',
+                "annotation_id": ann['id'],
+                "iscrowd": 0
+            }
+            tmp_data[ann['image_id']]['annotations'].append(obj)
+    #     save_json(data, json_file)
+    return tmp_data, [label for label in local_id_dict]
+
+
+def get_dataset_dicts(tmp_data, state):
+    list_of_ids = list(set([ann['category_id'] for asd in tmp_data for ann in tmp_data[asd]['annotations']]))
+    list_of_img_in_class = {category_id: [] for category_id in list_of_ids}
+
+    for img in tmp_data:
+        for ann in tmp_data[img]['annotations']:
+            list_of_img_in_class[ann['category_id']].append(img)
+
+    min_eval_img = 10
+    max_eval_percent = 0.2
+    list_of_test = []
+    list_of_train = []
+
+    for i in list_of_img_in_class:
+        eval_img = max(min_eval_img, int(len(list_of_img_in_class[i]) * max_eval_percent))
+        list_of_test.extend(list_of_img_in_class[i][:eval_img])
+        list_of_train.extend(list_of_img_in_class[i][eval_img:])
+
+    list_of_train = list(set(list_of_train))
+
+    list_of_test = list(set(list_of_test))
+    list_of_test = [img_id for img_id in list_of_test if img_id not in list_of_train]
+
+    dataset_dicts = []
+    if state == 'Train':
+        for image_id in list_of_train:
+            dataset_dicts.append(tmp_data[image_id])
+    else:
+        for image_id in list_of_test:
+            dataset_dicts.append(tmp_data[image_id])
+    return dataset_dicts
+
+
+def get_dataset_dicts_for_correct(img_dir, json_file, state='Train', split=[0.75, 0.25]):
+    json_file = json_file
+    with open(json_file) as f:
+        data = json.load(f)
+
+    bodyes_shapes_ids = {}
+    cntt = 0
+    for i in data['categories']:
+        if i['name'] == 'General body shape':
+            cntt += 1
+            bodyes_shapes_ids.append({
+                int(i['id']): cntt
+            })
 
     skip_data = []
     full_data = {}
@@ -55,18 +196,8 @@ def get_dataset_dicts(img_dir, state, json_file="fishial_collection_correct.json
         if ann['image_id'] in skip_data: continue
         if ann['image_id'] not in full_data:
             image_class = get_image_class(data, ann['image_id'])
-
-            if 'fishial_extra' not in image_class:
-                skip_data.append(ann['image_id'])
-                continue
-
-            if 'test_image' in image_class['fishial_extra']:
-
-                state_json = 'Test' if image_class['fishial_extra']['test_image'] else 'Train'
-                if state != state_json and state != 'Full':
-                    skip_data.append(ann['image_id'])
-                    continue
-            else:
+            if image_class['fishial_extra']['test_image'] or image_class['fishial_extra']['xray'] or \
+                    image_class['fishial_extra']['not_a_real_fish']:
                 skip_data.append(ann['image_id'])
                 continue
             record = {}
@@ -74,7 +205,6 @@ def get_dataset_dicts(img_dir, state, json_file="fishial_collection_correct.json
             try:
                 width, height = cv2.imread(filename).shape[:2]
             except:
-
                 print("error: ", filename)
                 continue
             record["file_name"] = filename
@@ -102,11 +232,17 @@ def get_dataset_dicts(img_dir, state, json_file="fishial_collection_correct.json
                 "bbox": bbox,
                 "bbox_mode": BoxMode.XYXY_ABS,
                 "segmentation": ann['segmentation'],
-                "category_id": 0,
+                "category_id": 0,  # bodyes_shapes_ids[ann['category_id']],
                 "iscrowd": 0
             }
 
             full_data[ann['image_id']]["annotations"].append(obj)
+
+    cnt_full = sum([len(full_data[z]["annotations"]) for z in full_data])
+    cnt_current = 0
+
+    if state == 'Train':
+        split[0]
     dataset_dicts = []
     for i in full_data:
         if len(full_data[i]["annotations"]) > 0:

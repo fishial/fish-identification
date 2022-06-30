@@ -3,13 +3,56 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
+class MultiSimilarityLoss(nn.Module):
+    def __init__(self):
+        super(MultiSimilarityLoss, self).__init__()
+        self.thresh = 0.5
+        self.margin = 0.1
+
+        self.scale_pos = 2.0
+        self.scale_neg = 40.0
+
+    def forward(self, feats, labels):
+        assert feats.size(0) == labels.size(0), \
+            f"feats.size(0): {feats.size(0)} is not equal to labels.size(0): {labels.size(0)}"
+        batch_size = feats.size(0)
+        sim_mat = torch.matmul(feats, torch.t(feats))
+
+        epsilon = 1e-5
+        loss = list()
+
+        for i in range(batch_size):
+            pos_pair_ = sim_mat[i][labels == labels[i]]
+            pos_pair_ = pos_pair_[pos_pair_ < 1 - epsilon]
+            neg_pair_ = sim_mat[i][labels != labels[i]]
+
+            neg_pair = neg_pair_[neg_pair_ + self.margin > min(pos_pair_)]
+            pos_pair = pos_pair_[pos_pair_ - self.margin < max(neg_pair_)]
+
+            if len(neg_pair) < 1 or len(pos_pair) < 1:
+                continue
+
+            # weighting step
+            pos_loss = 1.0 / self.scale_pos * torch.log(
+                1 + torch.sum(torch.exp(-self.scale_pos * (pos_pair - self.thresh))))
+            neg_loss = 1.0 / self.scale_neg * torch.log(
+                1 + torch.sum(torch.exp(self.scale_neg * (neg_pair - self.thresh))))
+            loss.append(pos_loss + neg_loss)
+
+        if len(loss) == 0:
+            return torch.zeros([], requires_grad=True)
+
+        loss = sum(loss) / batch_size
+        return loss
+
+
 class QuadrupletLoss(object):
 
-    def __init__(self, adaptive_margin = False):
+    def __init__(self, adaptive_margin=True):
         super().__init__()
         self.adaptive_margin = adaptive_margin
 
-    def __call__(self, embeddings, labels, margin=2.0):
+    def __call__(self, embeddings, labels, margin=1):
         """Build the quadruplet and triplet loss over a batch of embeddings.
 
         I generate all the valid quadruplet and average the loss over the positive ones.
@@ -49,6 +92,7 @@ class QuadrupletLoss(object):
 
             alpha_1_2 = F.relu(1.5 * margin)
             quadruplet_loss = quadruplet_loss + alpha_1_2
+
         else:
             triplet_loss = triplet_loss + margin
             quadruplet_loss = quadruplet_loss + margin
@@ -80,7 +124,7 @@ class QuadrupletLoss(object):
         # Get final mean quadruplet loss over the positive valid triplets
         quadruplet_loss = quadruplet_loss.sum() / (num_positive_qudruplets + 1e-16)
 
-        return triplet_loss
+        return quadruplet_loss
 
     def _get_losses_mask(self, labels):
         """Return a 4D mask
@@ -172,12 +216,13 @@ def pairwise_distance_torch(embeddings, device):
     pairwise_distances = torch.mul(pairwise_distances_squared, error_mask)
 
     # Explicitly set diagonals to zero.
-    mask_offdiagonals = torch.ones((pairwise_distances.shape[0], pairwise_distances.shape[1])) - torch.diag(torch.ones(pairwise_distances.shape[0]))
+    mask_offdiagonals = torch.ones((pairwise_distances.shape[0], pairwise_distances.shape[1])) - torch.diag(
+        torch.ones(pairwise_distances.shape[0]))
     pairwise_distances = torch.mul(pairwise_distances.to(device), mask_offdiagonals.to(device))
     return pairwise_distances
 
 
-def TripletSemiHardLoss(y_true, y_pred, device, margin=1.0):
+def TripletSemiHardLoss(y_true, y_pred, device, margin=10.0):
     """Computes the triplet loss_functions with semi-hard negative mining.
        The loss_functions encourages the positive distances (between a pair of embeddings
        with the same labels) to be smaller than the minimum negative distance
@@ -253,9 +298,9 @@ def TripletSemiHardLoss(y_true, y_pred, device, margin=1.0):
 
 
 class TripletLoss(nn.Module):
-    def __init__(self, device):
+    def __init__(self):
         super().__init__()
-        self.device = device
+        self.device = 'cuda'
 
     def forward(self, embeddings, labels, **kwargs):
         return TripletSemiHardLoss(labels, embeddings, self.device)

@@ -33,6 +33,7 @@ def accuracy_at_k(y_true: np.ndarray, embeddings: np.ndarray, K: int, sample: in
 
     matching_cnt = np.sum(matching_category_mask.sum(-1) > 0)
     accuracy = matching_cnt / len(y_true_sample)
+
     return accuracy
 
 
@@ -46,9 +47,9 @@ def accuracy(labels: np.array, dump: np.ndarray) -> t.List[float]:
 
 def evaluate_at_k(labels: np.array, dump: np.ndarray) -> t.List[float]:
     accuracies = []
-    for K in [1, 5, 10]:
-        acc_k = accuracy_at_k(labels, dump, K, 200)
-        accuracies.append(acc_k)
+    for K in [1, 3, 5]:
+        acc_k = accuracy_at_k(labels, dump, K)
+        accuracies.append(round(acc_k, 7))
     return accuracies
 
 

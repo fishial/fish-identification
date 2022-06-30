@@ -1,6 +1,6 @@
 model:
     backbone: "resnet18"
-    embeddings: 128
+    embeddings: 256
     
 dataset:
     train:
@@ -11,19 +11,19 @@ dataset:
         json_path: 'data_test.json'
   
     batchsampler:
-        classes_per_batch: 3
-        samples_per_class: 25
+        classes_per_batch: 5
+        samples_per_class: 15
 train:
     loss:
         name: 'qudruplet'
         adaptive_margin: False
-    learning_rate: 0.03
+    learning_rate: 0.012
     momentum: 0.9
-    epoch: 600
+    epoch: 1200
     warmup_steps: 500
     opt_level: 'O2'
 
-output_folder: '/home/codahead/Fishial/FishialReaserch/output/train_results/resnet_18_adaptive_margin'
-file_name: 'new_embedding_bs_25_3'
+output_folder: '/home/codahead/Fishial/FishialReaserch/output/train_results/resnet_18_98_finall_update'
+file_name: 'full_256'
 device: 'cuda'
-checkpoint: 
+checkpoint: '/home/codahead/Fishial/FishialReaserch/output/train_results/resnet_18_98_finall/full_256.ckpt'
