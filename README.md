@@ -40,7 +40,7 @@ $ pip3 install -r requirements.txt
 | ResNet18 Binary Classification  | [link](https://storage.cloud.google.com/fishial-ml-resources/binary_class.ckpt) |
 | ResNet18 Fish Classification Embedding 256 V2.0  | [link](https://storage.googleapis.com/fishial-ml-resources/models_29.06.2022/full_256.ckpt) |
 | ResNet18 DataBase Tensor  | [link](https://storage.googleapis.com/fishial-ml-resources/models_29.06.2022/train%2Btest_embedding.pt) |
-| ResNet18 v4 model pack 184 classes | [link](https://storage.googleapis.com/fishial-ml-resources/classification_v5.zip) |
+| ResNet18 v4 model pack 184 classes (latest) | [link](https://storage.googleapis.com/fishial-ml-resources/classification_v5.zip) |
 
 
 
