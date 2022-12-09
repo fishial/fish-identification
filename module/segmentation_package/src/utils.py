@@ -16,6 +16,10 @@ from detectron2.data import build_detection_test_loader
 from detectron2.evaluation import COCOEvaluator, inference_on_dataset
 from detectron2.engine import DefaultTrainer
 
+import fiftyone as fo
+import fiftyone.zoo as foz
+import fiftyone.brain as fob
+import fiftyone.core.utils as fou
 
 def read_json(path):
     if os.path.isfile(path):
@@ -59,7 +63,6 @@ def get_anns_by_image_id(data, image_id):
 def get_sorted_data(data):
     image_ids_dict = {}
     for ann_id in range(len(data['annotations']) - 1, -1, -1):
-        print("Left Full: {}".format(len(data['annotations']) - ann_id), end='\r')
         if data['annotations'][ann_id]['image_id'] in image_ids_dict:
             image_ids_dict[data['annotations'][ann_id]['image_id']].append(data['annotations'][ann_id])
         else:
@@ -67,12 +70,61 @@ def get_sorted_data(data):
                 data['annotations'][ann_id]['image_id']: [data['annotations'][ann_id]]})
     return image_ids_dict
 
+def split_ds(ds,ds_empty, state):
+    
+    train_conf, test_conf = 0.75, 0.25
+    
+    if state == 'Train':
+        start_idx_main, end_idx_main = 0, int(len(ds) * train_conf)
+        start_idx_empty, end_idx_empty = 0, int(len(ds_empty) * train_conf)
+        non_empty = [rec[1] for rec in list(ds.items())[start_idx_main:end_idx_main]] 
+        empty = [rec[1] for rec in list(ds_empty.items())[start_idx_empty:end_idx_empty]]
+#         non_empty.extend(empty)
+        return non_empty
+    else:
+        start_idx_main, end_idx_main = int(len(ds) * train_conf + 1), len(ds)
+        start_idx_empty, end_idx_empty = int(len(ds_empty) * train_conf + 1), len(ds_empty)
+        non_empty = [rec[1] for rec in list(ds.items())[start_idx_main:end_idx_main]] 
+        empty = [rec[1] for rec in list(ds_empty.items())[start_idx_empty:end_idx_empty]]
+#         non_empty.extend(empty)
+        return non_empty
+        
+#     non_empty = [rec[1] for rec in list(ds.items())[start_idx_main:end_idx_main]] 
+#     empty = [rec[1] for rec in list(ds_empty.items())[start_idx_empty:end_idx_empty]]
+#     non_empty.extend(empty)
+#     return non_empty
 
-def get_prepared_data(img_dir, json_file, path_to_class):
+
+def get_empty_ann(path_to_empty_ann):
+    tmp_data = {}
+    for f in listdir(path_to_empty_ann):
+
+        if not isfile(join(path_to_empty_ann, f)): continue
+
+        filename = os.path.join(path_to_empty_ann, f)
+        try:
+            width, height = cv2.imread(filename).shape[:2]
+        except:
+            print("skip file read error: ", filename)
+            continue
+
+        tmp_data.update({f: {
+            "file_name": filename,
+            "height": width,
+            "width": height,
+            "image_id": f,
+            "annotations": []
+        }})
+    return tmp_data
+    
+def get_prepared_data(img_dir, json_file, path_to_class = None):
     data = read_json(json_file)
-    valid_labels = read_json(path_to_class)
-    local_id_dict = {valid_labels[label_id]: int(label_id) for label_id in valid_labels}
-
+    if path_to_class:
+        valid_labels = read_json(path_to_class)
+        local_id_dict = {valid_labels[label_id]: int(label_id) for label_id in valid_labels}
+    else:
+        local_id_dict = {"Fish": 0}
+    
     bodyes_shapes_ids = {}
     for i in data['categories']:
         if i['name'] == 'General body shape':
@@ -95,15 +147,13 @@ def get_prepared_data(img_dir, json_file, path_to_class):
         if len(anns) == 0: continue
 
         filename = os.path.join(img_dir, image_dict['file_name'])
-        #         try:
-        #             width, height = cv2.imread(filename).shape[:2]
-        #             data['images'][indices]['width'] = width
-        #             data['images'][indices]['height'] = height
-        #         except:
-        #             print("skip file read error: ", filename)
-        #             continue
-
-        if len(anns) == 0: continue
+#         try:
+#             width, height = cv2.imread(filename).shape[:2]
+#             data['images'][indices]['width'] = width
+#             data['images'][indices]['height'] = height
+#         except:
+#             print("skip file read error: ", filename)
+#             continue
 
         tmp_data.update({image_dict['id']: {
 
@@ -173,6 +223,131 @@ def get_dataset_dicts(tmp_data, state):
             dataset_dicts.append(tmp_data[image_id])
     return dataset_dicts
 
+
+def get_fiftyone_dataset(img_dir, json_file):
+    samples = []
+
+    data = read_json(json_file)
+    local_id_dict = {"Fish": 0}
+    
+    bodyes_shapes_ids = {}
+    for i in data['categories']:
+        if i['name'] == 'General body shape':
+            bodyes_shapes_ids.update({int(i['id']): i['supercategory']})
+
+    skip_data = []
+    data_with_full_ann = get_sorted_data(data)
+
+    for indices, image_dict in enumerate(data['images']):
+        
+        if image_dict['fishial_extra']['test_image'] or image_dict['fishial_extra']['xray'] or \
+                image_dict['fishial_extra'][
+                    'not_a_real_fish']:
+            skip_data.append(1)
+            continue
+        print(f"Left: {len(data['images']) - indices} skip: {len(skip_data)}", end='\r')
+        
+        if image_dict['id'] not in data_with_full_ann: continue
+        anns = data_with_full_ann[image_dict['id']]
+        if len(anns) == 0: continue
+
+        filename = os.path.join(img_dir, image_dict['file_name'])
+        
+        width = data['images'][indices]['width']
+        height = data['images'][indices]['height']
+        odm_tag = 'include_in_odm' if data['images'][indices]['fishial_extra']['include_in_odm'] else 'not_include_in_odm'
+        
+        
+        polylines = []
+        detections = []
+        res = False
+        for ann in anns:
+            
+            if 'category_id' not in ann: continue
+            if 'segmentation' not in ann: continue
+            if ann['category_id'] not in bodyes_shapes_ids: continue
+
+            # some if conditional if we need manualy skip annotations
+            px = []
+            py = []
+            poly = []
+            for z in range(int(len(ann['segmentation'][0]) / 2)):
+                px.append(ann['segmentation'][0][z * 2]/width)
+                py.append(ann['segmentation'][0][z * 2 + 1]/height)
+                
+                poly.append((ann['segmentation'][0][z * 2]/width, ann['segmentation'][0][z * 2 + 1]/height))
+
+            bbox = [np.min(px).tolist(), np.min(py).tolist(), np.max(px).tolist(), np.max(py).tolist()]
+            label = bodyes_shapes_ids[ann['category_id']]
+            detections.append(
+                fo.Detection(label=label, bounding_box=[bbox[0], bbox[1], bbox[2] - bbox[0], bbox[3] - bbox[1]])
+            )
+            res = ann['is_valid']
+            polyline = fo.Polyline(
+                label=label,
+                points=[poly],
+                closed=True,
+                filled=True
+            )
+            polyline['attributes'] = {'annotation_id': ann['id']}
+#             polyline.save()
+            polylines.append(polyline)
+        tag_is_valid = 'is_valid' if res else 'is_invalid'
+        sample = fo.Sample(filepath=filename, id=image_dict['id'], tags=[odm_tag, tag_is_valid])
+        sample["ground_truth"] = fo.Detections(detections=detections)
+        sample["polylines"] = fo.Polylines(polylines=polylines)
+        sample["image_id"] = str(image_dict['id'])
+        samples.append(sample)
+#     save_json(data, 'dataset/export/fixed_all_json_size.json')
+
+    return samples
+
+
+def bounding_box(points):
+    x_coordinates, y_coordinates = zip(*points)
+
+    return [min(x_coordinates), min(y_coordinates), max(x_coordinates), max(y_coordinates)]
+
+def get_fiftyone_dicts(samples):
+    samples.compute_metadata()
+
+    dataset_dicts = []
+    for idx, sample in enumerate(samples.select_fields(["id", "filepath", "metadata", "polylines"])):
+        print(f"Left: {idx}/{len(samples)}", end= '\r')
+        if 'is_invalid' in sample.tags: continue
+        height = sample.metadata["height"]
+        width = sample.metadata["width"]
+        
+        record = {}
+        record["file_name"] = sample.filepath
+        record["image_id"] = sample.id
+        
+        try:
+            height, width = cv2.imread(sample.filepath).shape[:2]
+        except:
+            print("error: ", filename)
+            continue
+
+        record["height"] = height
+        record["width"] = width
+        objs = []
+        for fo_poly in sample.polylines['polylines']:
+            poly = [(x*width, y*height) for x, y in fo_poly.points[0]]
+            poly = [p for x in poly for p in x]
+            bbox = bounding_box(fo_poly.points[0])
+            bbox = [bbox[0] * width, bbox[1] * height, bbox[2] * width, bbox[3] * height]
+            obj = {
+                "bbox": bbox,
+                "bbox_mode": BoxMode.XYXY_ABS,
+                "segmentation": [poly],
+                "category_id": 0,
+            }
+            objs.append(obj)
+
+        record["annotations"] = objs
+        dataset_dicts.append(record)
+
+    return dataset_dicts
 
 def get_dataset_dicts_for_correct(img_dir, json_file, state='Train', split=[0.75, 0.25]):
     json_file = json_file
@@ -465,7 +640,6 @@ def get_mask(image, pts):
     ## (3) do bit-op
     dst = cv2.bitwise_and(croped, croped, mask=mask)
     return dst
-
 
 def approximate(output, eps):
     polygons = []

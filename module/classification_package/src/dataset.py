@@ -1,3 +1,8 @@
+import sys
+
+# Change path specificly to your directories
+sys.path.insert(1, '/home/codahead/Fishial/FishialReaserch')
+
 import pandas as pd
 import collections
 import numpy as np
@@ -21,30 +26,115 @@ from torch.utils.data.dataset import Dataset
 from torch.utils.data.sampler import BatchSampler
 from module.segmentation_package.src.utils import get_mask
 from module.classification_package.src.utils import read_json
-import sys
-
-# Change path specificly to your directories
-sys.path.insert(1, '/home/codahead/Fishial/FishialReaserch')
 
 
+class FishialDatasetFoOnlineCuting(Dataset):
+    def __init__(self,
+                 records,
+                 train_state=False,
+                 transform=None,
+                 crop_type = 'poly'):
+
+        self.train_state = train_state
+        self.crop_type = crop_type
+        self.transform = transform
+        
+        self.data_compleated = []
+        for label in records:
+            self.data_compleated.extend(records[label])
+    
+        self.n_classes = len(set([i['name'] for i in self.data_compleated]))
+        self.targets = [i['id_internal'] for i in self.data_compleated]
+        
+        
+    def __get_margin(self, poly):
+        # create example polygon
+        poly = geometry.Polygon(poly)
+
+        # get minimum bounding box around polygon
+        box = poly.minimum_rotated_rectangle
+
+        # get coordinates of polygon vertices
+        x, y = box.exterior.coords.xy
+
+        # get length of bounding box edges
+        edge_length = (Point(x[0], y[0]).distance(Point(x[1], y[1])), Point(x[1], y[1]).distance(Point(x[2], y[2])))
+
+        # get length of polygon as the longest edge of the bounding box
+        length = max(edge_length)
+
+        # get width of polygon as the shortest edge of the bounding box
+        width = min(edge_length)
+        marg = int(min(width, length) * 0.05)
+        random_margin = random.randint(-marg, int(marg * 1.9))
+        return random_margin
+
+    def __shrink_poly(self, poly, value, img_shape):
+        pco = pyclipper.PyclipperOffset()
+        pco.AddPath(poly, pyclipper.JT_ROUND, pyclipper.ET_CLOSEDPOLYGON)
+        solution = pco.Execute(value)
+
+        for i in range(len(solution[0])):
+            solution[0][i][0] = max(0, min(img_shape[1], solution[0][i][0]))
+            solution[0][i][1] = max(0, min(img_shape[0], solution[0][i][1]))
+        return solution
+    
+    def __get_poly_mask(self, img_path, polyline_main):
+        
+        image = cv2.imread(img_path)
+        if self.train_state:
+            margine = self.__get_margin(polyline_main)
+            polyline_main = self.__shrink_poly(polyline_main, margine, image.shape[:2])[0]
+        mask = get_mask(image, np.array(polyline_main))
+        
+        return mask
+    
+    def __get_cropped_rect(self, img_path):
+
+        img_path = self.data_compleated[idx]['file_name']
+        image = cv2.imread(img_path)
+        return image
+    
+    def __len__(self):
+        # Return the length of the dataset
+        return len(self.data_compleated)
+
+    def __getitem__(self, idx):
+        # Return the observation based on an index. Ex. dataset[0] will return the first element from the dataset, in this case the image and the label.
+        img_path = self.data_compleated[idx]['file_name']
+        polyline_main = self.data_compleated[idx]['poly']
+        
+        if self.crop_type == 'poly':
+            image = self.__get_poly_mask(img_path, polyline_main)
+        else:
+            image = self.__get_cropped_rect(img_path)
+            
+        mask = Image.fromarray(image) 
+        if self.transform:
+            mask = self.transform(mask)
+        
+        return (mask, torch.tensor(self.data_compleated[idx]['id_internal']))#, self.data_compleated[idx])
+    
 class FishialDatasetOnlineCuting(Dataset):
     def __init__(self,
                  path_to_images_folder,
                  path_to_COCO_file,
                  dataset_type='train',
                  train_state=False,
-                 transform=None):
+                 transform=None,
+                 crop = False):
 
-        min_image_per_class = 30
-        min_eval_img = 0
-        per_eval_img = 0
-        max_img_per_class = 220
+        min_image_per_class = 50
+        min_eval_img = 15
+        per_eval_img = 0.2
+        max_img_per_class = 350
 
         self.path_to_images_folder = path_to_images_folder
         self.path_to_COCO_file = path_to_COCO_file
         self.dataset_type = dataset_type
         self.json_path = dataset_type
         self.train_state = train_state
+        self.crop = crop
 
         data = read_json(path_to_COCO_file)
         filenames = next(walk(path_to_images_folder), (None, None, []))[2]  # [] if no file
@@ -52,13 +142,12 @@ class FishialDatasetOnlineCuting(Dataset):
         valid_images_indices = {}
         for image_rec_id, image_rec in enumerate(data['images']):
             if 'file_name' in data['images'][image_rec_id]:
-                if data['images'][image_rec_id]['file_name'] in filenames:
-                    if data['images'][image_rec_id]['fishial_extra']['xray'] or \
-                            data['images'][image_rec_id]['fishial_extra']['not_a_real_fish'] or \
-                            data['images'][image_rec_id]['fishial_extra']['no_fish'] or \
-                            data['images'][image_rec_id]['fishial_extra']['test_image']: continue
-
-                    valid_images_indices.update({data['images'][image_rec_id]['id']: data['images'][image_rec_id]})
+                if data['images'][image_rec_id]['file_name'] not in filenames: continue
+                if data['images'][image_rec_id]['fishial_extra']['xray'] or \
+                        data['images'][image_rec_id]['fishial_extra']['not_a_real_fish'] or \
+                        data['images'][image_rec_id]['fishial_extra']['no_fish'] or \
+                        data['images'][image_rec_id]['fishial_extra']['test_image']: continue
+                valid_images_indices.update({data['images'][image_rec_id]['id']: data['images'][image_rec_id]})
         list_of_valid_categories = {}
 
         for category in data['categories']:
@@ -73,11 +162,15 @@ class FishialDatasetOnlineCuting(Dataset):
 
         for ann in data['annotations']:
             if 'category_id' not in ann: continue
+            if not ann['is_valid']:
+                print("isn't valid", end='\r')
+                continue
             if ann['category_id'] in list_of_valid_categories:
                 if ann['image_id'] in valid_images_indices:
                     ann.update({
                         'file_name': valid_images_indices[ann['image_id']]['file_name']
                     })
+                    if len(ann['segmentation'][0]) < 10: continue
                     if valid_images_indices[ann['image_id']]['fishial_extra']['include_in_odm']:
                         list_of_valid_categories[ann['category_id']]['anns']['odm_true'].append(ann)
                     else:
@@ -191,13 +284,8 @@ class FishialDatasetOnlineCuting(Dataset):
             solution[0][i][0] = max(0, min(img_shape[1], solution[0][i][0]))
             solution[0][i][1] = max(0, min(img_shape[0], solution[0][i][1]))
         return solution
-
-    def __len__(self):
-        # Return the length of the dataset
-        return len(self.data_compleated)
-
-    def __getitem__(self, idx):
-        # Return the observation based on an index. Ex. dataset[0] will return the first element from the dataset, in this case the image and the label.
+    
+    def __get_poly_mask(self, idx):
         if torch.is_tensor(idx):
             idx = idx.tolist()
 
@@ -205,21 +293,55 @@ class FishialDatasetOnlineCuting(Dataset):
         poly_raw = self.data_compleated[idx]['poly']
         polyline_main = [[int(poly_raw[point_id * 2]), int(poly_raw[point_id * 2 + 1])] for point_id in
                          range(int(len(poly_raw) / 2))]
-
+        
         image = cv2.imread(img_path)
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
         if self.dataset_type == 'train' and self.train_state:
             margine = self.__get_margin(polyline_main)
             polyline_main = self.__shrink_poly(polyline_main, margine, image.shape[:2])[0]
-
         mask = get_mask(image, np.array(polyline_main))
 
         if self.transform:
             mask = Image.fromarray(mask)
             mask = self.transform(mask)
         del image
-        return (mask, torch.tensor(self.data_compleated[idx]['id_internal']), self.data_compleated[idx])
+        return mask
+    
+    def __get_cropped_mask(self, idx):
+        if torch.is_tensor(idx):
+            idx = idx.tolist()
+
+        img_path = os.path.join(self.path_to_images_folder, self.data_compleated[idx]['file_name'])
+        poly_raw = self.data_compleated[idx]['poly']
+        polyline_main = [[int(poly_raw[point_id * 2]), int(poly_raw[point_id * 2 + 1])] for point_id in
+                         range(int(len(poly_raw) / 2))]
+                    
+        image = cv2.imread(img_path)
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+                         
+        rect = cv2.boundingRect(np.array(polyline_main))
+        x, y, w, h = rect
+        mask = image[y:y + h, x:x + w].copy()
+                         
+        if self.transform:
+            mask = Image.fromarray(mask)
+            mask = self.transform(mask)
+        del image
+        return mask
+    
+    def __len__(self):
+        # Return the length of the dataset
+        return len(self.data_compleated)
+
+    def __getitem__(self, idx):
+        # Return the observation based on an index. Ex. dataset[0] will return the first element from the dataset, in this case the image and the label.
+        if self.crop:
+            mask = self.__get_poly_mask(idx)
+        else:
+            mask = self.__get_cropped_mask(idx)
+        
+        return (mask, torch.tensor(self.data_compleated[idx]['id_internal']))#, self.data_compleated[idx])
 
 
 class FishialDataset(Dataset):
@@ -286,8 +408,9 @@ class BalancedBatchSampler(BatchSampler):
     def __init__(self, dataset, n_classes, n_samples):
         loader = DataLoader(dataset)
         self.labels_list = []
-        for _, label in loader:
+        for _, label in loader: # image_tensor, label, dict_description
             self.labels_list.append(label)
+            
         self.labels = torch.LongTensor(self.labels_list)
         self.labels_set = list(set(self.labels.numpy()))
         self.label_to_indices = {label: np.where(self.labels.numpy() == label)[0]

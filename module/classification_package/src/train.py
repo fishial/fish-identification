@@ -87,7 +87,7 @@ def train(scheduler, t_total: int, opt: Optimizer, model: nn.Module, data_loader
                     #                     logger.info("  Num steps = %d", len(ds_val))
 
                     with torch.no_grad():
-                        scores = evaluate(model=model, datasets=[data_loader.dataset], metrics=metrics,
+                        scores = evaluate(model=model, datasets=[data_loader.dataset, ds_val], metrics=metrics,
                                           device=device)
                     logger.info("\n")
                     logger.info("Validation Results")
@@ -105,7 +105,7 @@ def train(scheduler, t_total: int, opt: Optimizer, model: nn.Module, data_loader
                                                             f'{file_name}.ckpt'))
                     if top_epoch < val_acc: top_epoch = val_acc
 
-                    logger.info("best accuracy so far: %f" % top_epoch)
+                    logger.info("best accuracy so far on validation: %f" % top_epoch)
 
                     model.train()
 

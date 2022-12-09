@@ -24,6 +24,28 @@ This folder contains working scripts for data processing.
  This is a little bit changed version [this](https://github.com/trsvchn/coco-viewer) repository, which could load images from **coco_url**.  
 
 
+### Generate dataBase for Classification model
+* [predictDataEmbeddingClassificationModel.py](classification/predictDataEmbeddingClassificationModel.ipynb) - this notebook allows you to generate data for the embedding classification model.
+
+
+### Voxel51
+
+To register a model in the dataset in the voxel 1 application
+necessary:
+1. download all images to a specific folder to do this, run the following script:
+* [downloader_coco_imgs.py](segmentation/downloader_coco_imgs.py) this script downloads all available images by **coco_url** tag in several threads to speed up the work.
+
+to do this, you must specify two arguments: the path to the export file and the folder where to download the images.
+example: 
+```
+python Object-Detection-Model/helper/segmentation/downloader_coco_imgs.py -c '/home/fishial/Fishial/dataset/export/03_export_Verified_ALL.json.json' -i '/home/fishial/Fishial/dataset/fishial_collection-test'
+```
+
+2. [converterCocoToVoxel.py](segmentation/converterCocoToVoxel.py) Run the script that converts the annotation file to voxel format and saves it.
+```
+python converterCocoToVoxel.py -c '/home/fishial/Fishial/dataset/export/03_export_Verified_ALL.json.json' -i '/home/fishial/Fishial/dataset/fishial_collection/data' -ds 'export-fishial-november-test'
+```
+
 #### Usage
 
 ```bash

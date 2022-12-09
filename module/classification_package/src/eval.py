@@ -63,11 +63,11 @@ def evaluate(model: nn.Module, datasets: [FishialDataset], metrics: list, device
             if metric == 'at_k':
                 accuracies = evaluate_at_k(np.array(dataset.targets), dump)
                 total_accuracy.update(
-                    {os.path.basename(dataset.json_path) + "_" + metric: accuracies}
+                    {str(dataset.train_state) + "_" + metric: accuracies}
                 )
             elif metric == 'accuracy':
                 accuracies = accuracy(np.array(dataset.data_frame['target'].tolist()), dump)
                 total_accuracy.update(
-                    {os.path.basename(dataset.json_path) + "_" + metric: accuracies}
+                    {str(dataset.train_state) + "_" + metric: accuracies}
                 )
     return total_accuracy

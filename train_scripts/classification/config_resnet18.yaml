@@ -11,19 +11,19 @@ dataset:
         json_path: 'data_test.json'
   
     batchsampler:
-        classes_per_batch: 5
-        samples_per_class: 15
+        classes_per_batch: 12
+        samples_per_class: 10
 train:
     loss:
         name: 'qudruplet'
         adaptive_margin: False
     learning_rate: 0.012
     momentum: 0.9
-    epoch: 1200
+    epoch: 4000
     warmup_steps: 500
     opt_level: 'O2'
 
-output_folder: '/home/codahead/Fishial/FishialReaserch/output/train_results/resnet_18_98_finall_update'
-file_name: 'full_256'
+output_folder: '/home/fishial/Fishial/output/classification/resnet_18_184_train_06_12'
+file_name: 'model_184'
 device: 'cuda'
-checkpoint: '/home/codahead/Fishial/FishialReaserch/output/train_results/resnet_18_98_finall/full_256.ckpt'
+checkpoint: 

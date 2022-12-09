@@ -8,11 +8,9 @@ import os
 import json
 import copy
 from tqdm import tqdm
-import cv2
 import numpy as np
 from os import listdir
 from os.path import isfile, join
-import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 import os, json
@@ -256,8 +254,8 @@ def overlay_image_alpha(img, img_overlay, x, y, alpha_mask):
 
 def apply_mask(src, src_mask_origin, color_mask, binary_mask, angle, box, polygon, min_ratio=0.025):
     if angle != 1:
-        color_mask = cv2.rotate(color_mask, cv2.cv2.ROTATE_90_CLOCKWISE)
-        binary_mask = cv2.rotate(binary_mask, cv2.cv2.ROTATE_90_CLOCKWISE)
+        color_mask = cv2.rotate(color_mask, cv2.ROTATE_90_CLOCKWISE)
+        binary_mask = cv2.rotate(binary_mask, cv2.ROTATE_90_CLOCKWISE)
         w, h = color_mask.shape[:2]
         for p_a in range(len(polygon)):
             tmp_x, tmp_y = polygon[p_a][0], polygon[p_a][1]
@@ -354,7 +352,7 @@ def apply_copy_paste_aug(target_instance, data_valid_paste):
             target_image_size = target['full_mask'][0].shape[:2]
             state = check_size(i, target_image_size)
             if not state:
-                print("Fish size isn't valid")
+                print("Fish size isn't valid: ", len(paste_aug))
                 break
 
             angle = get_rotate_angle(i, rect_aug)
@@ -381,7 +379,7 @@ def apply_copy_paste_aug(target_instance, data_valid_paste):
             rectangles.append(paste_rect)
             ix += 1
         except Exception as e:
-            print(f"error: {e}")
+            print(f"errorWWWWW: {e}")
             pass
 
     return img_data

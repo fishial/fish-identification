@@ -5,6 +5,7 @@ import torch
 import math
 import json
 import sys
+import os
 
 from torch.optim.lr_scheduler import LambdaLR
 from torchvision.transforms.functional import pad
@@ -104,6 +105,20 @@ def get_padding(image):
     return padding
 
 
+def classify_by_database(data_base, embedding):
+        diff = (data_base - embedding).pow(2).sum(dim=2).sqrt()
+        val, indi = torch.sort(diff)
+        class_lib = []
+        
+        for idx, i in enumerate(val):
+            for dist_id, dist in enumerate(i[:25]):
+                if dist == 0.0:
+                    continue
+                if data_base[idx][indi[idx][dist_id]].sum() > 10000: continue
+                class_lib.append([idx, dist])
+        class_lib = sorted(class_lib, key=lambda x: x[1], reverse=False)
+        return class_lib
+    
 class NewPad(object):
     def __init__(self, fill=0, padding_mode='constant'):
         assert isinstance(fill, (numbers.Number, str, tuple))
@@ -125,6 +140,39 @@ class NewPad(object):
     def __repr__(self):
         return self.__class__.__name__ + '(padding={0}, fill={1}, padding_mode={2})'. \
             format(self.fill, self.padding_mode)
+
+def update_internal_id(records_list, labels_dict):
+    for label in records_list:
+        for k in records_list[label]:
+            k.update({'id_internal': labels_dict[label]})
+            
+def get_data_config(dataset):
+    labels_dict = {}
+    for sample_id, sample in enumerate(dataset):
+        base_name = os.path.basename(sample['filepath'])
+        width = sample['width']
+        height = sample['height']
+        print(f"left: {sample_id}/{len(dataset)}", end='\r')
+
+        polyline = sample['polyline']
+        
+        if polyline['label'] not in labels_dict:
+            labels_dict.update({polyline['label']: []})
+
+        poly = [[int(point[0] * width), int(point[1] * height)] for point in polyline['points'][0]]
+        labels_dict[polyline['label']].append({
+                            'id':sample['annotation_id'],
+                            'name': polyline['label'],
+                            'base_name': base_name,
+                            'image_id': sample['image_id'],
+                            'poly': poly,
+                            'file_name': sample['filepath']})
+    return labels_dict
+
+def bounding_box(points):
+    x_coordinates, y_coordinates = zip(*points)
+
+    return [min(x_coordinates), min(y_coordinates), max(x_coordinates) - min(x_coordinates), max(y_coordinates) - min(y_coordinates)]
 
 
 def find_device():

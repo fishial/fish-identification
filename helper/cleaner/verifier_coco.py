@@ -1,11 +1,15 @@
 import argparse
 import json
+import os
 import logging
+
+import pandas as pd
 
 logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 
 parser = argparse.ArgumentParser(description="View images with bboxes from the COCO dataset")
 parser.add_argument("-a", "--annotations", default='', type=str, metavar="PATH", help="path to annotations json file")
+parser.add_argument("-p", "--path_to_save", default='', type=str, metavar="PATH", help="path to save warnigs")
 
 
 def read_json(data):
@@ -55,14 +59,11 @@ def get_correct_category_ids(export):
 
 def valid_image(image):
     warning_list = []
-    # critical = False
-    # if 'id' not in image:
-    #     critical = True
-    #     warning_list.append("['images']['id'] isn't exist")
     if 'width' not in image or 'height' not in image:
         warning_list.append("['images']['width'] or ['images']['height'] isn't exist")
     else:
         if type(image['width']) != int or type(image['height']) != int:
+#             print("TYPE: ", type(image['width']), type(image['height']))
             warning_list.append(f"['images']['width'] or ['images']['height'] wrong type")
     if 'fishial_extra' not in image:
         warning_list.append("['images']['fishial_extra'] isn't exist")
@@ -72,45 +73,38 @@ def valid_image(image):
         else:
             if not type(image['fishial_extra']['test_image']) is bool:
                 warning_list.append("['images']['fishial_extra']['test_image'] wrong type")
-    # if "file_name" not in image and "coco_url" not in image:
-    #     warning_list.append("['images']['fishial_extra']['file_name'] isn't exist")
+    if "file_name" not in image and "coco_url" not in image:
+        warning_list.append("['images']['fishial_extra']['file_name'] / coco_url isn't exist")
     return warning_list
 
 
 def get_invalid(export, category_list):
-    data_warnings = {}
+    data_warnings = {
+        "image_id": [],
+        "annotation_id": [],
+        "reason": []
+    }
 
     for cr_id, image_class in enumerate(export['images']):
         print(f"Left: {len(export['images']) - cr_id}", end='\r')
+        image_id = image_class['id']
+        
         warn_list = valid_image(image_class)
-        if len(warn_list) > 0:
-            data_warnings.update({
-                image_class['id']: {
-                    'image_warn': warn_list
-                }
-            })
+        
+        for warn in warn_list:
+            data_warnings['image_id'].append(image_id)
+            data_warnings['annotation_id'].append("image instance")
+            data_warnings['reason'].append(warn)
 
-        for ann_id, ann in enumerate(export['annotations']):
+        for ann_idx, ann in enumerate(export['annotations']):
             if ann['image_id'] == image_class['id']:
                 infos = valid_mask(ann, category_list)
-
+                ann_id = ann['id']
                 if infos[0]:
-                    if len(infos[1]) > 0:
-                        if image_class['id'] in data_warnings:
-                            if 'annotations_warn' in data_warnings[image_class['id']]:
-                                data_warnings[image_class['id']]['annotations_warn'].append({ann_id: infos[1]})
-                            else:
-                                data_warnings.update({
-                                    image_class['id']: {
-                                        'annotations_warn': [{ann_id: infos[1]}]
-                                    }
-                                })
-                        else:
-                            data_warnings.update({
-                                image_class['id']: {
-                                    'annotations_warn': [{ann_id: infos[1]}]
-                                }
-                            })
+                    for info in infos[1]:
+                        data_warnings['image_id'].append(image_id)
+                        data_warnings['annotation_id'].append(ann_id)
+                        data_warnings['reason'].append(info)
     return data_warnings
 
 
@@ -121,7 +115,10 @@ def main():
     export_dict = read_json(args.annotations)
     category_list = get_correct_category_ids(export_dict)
     data_warnings = get_invalid(export_dict, category_list)
-    save_json(data_warnings, "../warnings.json")
+
+    df = pd.DataFrame.from_dict(data_warnings)
+    df.to_excel(os.path.join(args.path_to_save,'warnigs.xlsx'))  
+
 
 
 if __name__ == "__main__":
