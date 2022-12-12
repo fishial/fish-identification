@@ -15,6 +15,9 @@ $ pip3 install -r requirements.txt
 ```
 
 ## Getting Started
+
+* [Instruction how to load the models.ipynb](Instruction how to load the models.ipynb) This jupyter notebook allows you to run segmentation and classification neural networks on Google Cloud or your computer, after downloading the files from the links below.
+
 * [auto_train_cross.py](train_scripts/classification/auto_train_cross.py) is the script performs training automatically with different parameters the selected model using the cross entropy loss function. The checkpoint with the best performance on the validation dataset is saved to the output folder.
 
 * [auto_train_triplet.py](train_scripts/classification/auto_train_triplet.py) is the script performs training automatically with different the selected model using the (Triplet Quadruplet) loss function. The checkpoint with the best performance on the validation dataset according k-metric is saved to the output folder.
@@ -41,7 +44,7 @@ $ pip3 install -r requirements.txt
 | ResNet18 Fish Classification Embedding 256 V2.0  | [link](https://storage.googleapis.com/fishial-ml-resources/models_29.06.2022/full_256.ckpt) |
 | ResNet18 DataBase Tensor  | [link](https://storage.googleapis.com/fishial-ml-resources/models_29.06.2022/train%2Btest_embedding.pt) |
 | ResNet18 v4 model pack 184 classes (latest) | [link](https://storage.googleapis.com/fishial-ml-resources/classification_v5.zip) |
-
+| MaskRCNN Fish Segmentation (Update 15.11.2022) (latest)  | [link](https://storage.googleapis.com/fishial-ml-resources/model_15_11_2022.pth) |
 
 
 ## [Train results](train_scripts/README.md)
