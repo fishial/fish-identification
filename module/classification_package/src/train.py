@@ -25,7 +25,7 @@ def train(scheduler, t_total: int, opt: Optimizer, model: nn.Module, data_loader
           output_folder="output", eval_every=None, file_name="best_score"):
     losses = AverageMeter()
     model = model.to(device)
-    top_acc_1 = 0.2
+    top_acc_1 = 0.0
     top_epoch, global_step = 0.0, 0.0
     step = 0
     gradient_accumulation_steps = 1
@@ -39,7 +39,12 @@ def train(scheduler, t_total: int, opt: Optimizer, model: nn.Module, data_loader
 
     while True:
 
-        model.train()
+        #model.train()
+        model.eval()
+        model.fc_parallel.requires_grad_(True)
+        model.backbone.requires_grad_(False)
+        model.embeddings.requires_grad_(False)
+        
         epoch_iterator = tqdm(data_loader,
                               desc="Training (X / X Steps) (loss=X.X)",
                               bar_format="{l_bar}{r_bar}",
@@ -49,12 +54,18 @@ def train(scheduler, t_total: int, opt: Optimizer, model: nn.Module, data_loader
         for batch_idx, batch in enumerate(epoch_iterator):
             batch = tuple(t.to(device) for t in batch)
             images, labels = batch
-
-            output = model(images)
+            
+            if metrics[0] == 'at_k':
+                output = model(images)[0]
+            else:
+                output = model(images)[1]
+                
             loss = loss_fn(output, labels)
-
             preds = torch.argmax(output, dim=-1)
 
+            with amp.scale_loss(loss, opt) as scaled_loss:
+                scaled_loss.backward(retain_graph=True)
+                
             if len(all_preds) == 0:
                 all_preds.append(preds.detach().cpu().numpy())
                 all_label.append(labels.detach().cpu().numpy())
@@ -65,9 +76,7 @@ def train(scheduler, t_total: int, opt: Optimizer, model: nn.Module, data_loader
                 all_label[0] = np.append(
                     all_label[0], labels.detach().cpu().numpy(), axis=0
                 )
-
-            with amp.scale_loss(loss, opt) as scaled_loss:
-                scaled_loss.backward()
+                
 
             if (step + 1) % gradient_accumulation_steps == 0:
                 losses.update(loss.item() * gradient_accumulation_steps)
@@ -108,7 +117,11 @@ def train(scheduler, t_total: int, opt: Optimizer, model: nn.Module, data_loader
                     logger.info("best accuracy so far on validation: %f" % top_epoch)
 
                     model.train()
-
+                    #model.eval()
+                    model.fc_parallel.requires_grad_(True)
+                    model.backbone.requires_grad_(False)
+                    model.embeddings.requires_grad_(False)
+                    
                 if global_step % t_total == 0:
                     break
         all_preds, all_label = all_preds[0], all_label[0]

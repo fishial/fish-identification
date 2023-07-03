@@ -31,10 +31,17 @@ from module.classification_package.src.utils import read_json
 class FishialDatasetFoOnlineCuting(Dataset):
     def __init__(self,
                  records,
+                 labels_dict,
                  train_state=False,
                  transform=None,
                  crop_type = 'poly'):
-
+        
+        #Add internal id by dictionary
+        for label in records:
+            for k in records[label]:
+                k.update({'id_internal': labels_dict[label]})
+                
+        self.labels_dict = labels_dict
         self.train_state = train_state
         self.crop_type = crop_type
         self.transform = transform
@@ -65,7 +72,7 @@ class FishialDatasetFoOnlineCuting(Dataset):
 
         # get width of polygon as the shortest edge of the bounding box
         width = min(edge_length)
-        marg = int(min(width, length) * 0.05)
+        marg = int(min(width, length) * 0.04)
         random_margin = random.randint(-marg, int(marg * 1.9))
         return random_margin
 
@@ -84,7 +91,11 @@ class FishialDatasetFoOnlineCuting(Dataset):
         image = cv2.imread(img_path)
         if self.train_state:
             margine = self.__get_margin(polyline_main)
-            polyline_main = self.__shrink_poly(polyline_main, margine, image.shape[:2])[0]
+            try:
+                polyline_main = self.__shrink_poly(polyline_main, margine, image.shape[:2])[0]
+            except:
+                print(f"Error: {img_path}")
+                pass
         mask = get_mask(image, np.array(polyline_main))
         
         return mask
@@ -113,7 +124,7 @@ class FishialDatasetFoOnlineCuting(Dataset):
         if self.transform:
             mask = self.transform(mask)
         
-        return (mask, torch.tensor(self.data_compleated[idx]['id_internal']))#, self.data_compleated[idx])
+        return (mask, torch.tensor(self.data_compleated[idx]['id_internal']))
     
 class FishialDatasetOnlineCuting(Dataset):
     def __init__(self,
