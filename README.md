@@ -29,6 +29,8 @@ $ pip3 install -r requirements.txt
 
 * [train_copy_paste.py](train_scripts/segmentation/train_copy_paste.py) is the basic set up script to train segmentation model using Detectrin2 API with Copy Paste Augumentation.
 
+* [ExportModelToTorchscript.ipynb](helper/ExportModelToTorchscript.ipynb) This jupyter notebook allows convert Classification pytorch model to TorchScript format, and Detectron2 to Torchscript model.
+
 * ([model.py](module/classification_package/src/model.py), [utils.py](module/classification_package/src/utils.py)): These files contain the main classification pipline implementation.
 
 * [CreateDataBaseTensor.py](helper/classification/CreateDataBaseTensor.py): This script is designed to get the attachment tensor for a trained neural network, the resulting tensor has dimensions {number of classes * maximum number of images for one class * embedding dimension} for classes in which the number of attachments is less than in the maximum class, a tensor with a value of 100 is added in order not to affect for inference
