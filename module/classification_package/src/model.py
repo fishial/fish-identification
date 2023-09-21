@@ -3,20 +3,20 @@ import torch.nn as nn
 import torchvision.models as models
 
 
-def init_model(config):
-    if config['model']['backbone'] == 'resnet18':
+def init_model(num_classes, embeddings = 256, backbone='resnet18', checkpoint = None, device = 'cpu'):
+    if backbone == 'resnet18':
         resnet = models.resnet18(pretrained=True)
-    elif config['model']['backbone'] == 'resnet50':
+    elif backbone == 'resnet50':
         resnet = models.resnet50(pretrained=True)
     else:
         resnet = models.resnet18(pretrained=True)
-    cnt = resnet.fc.in_features
+    features = resnet.fc.in_features
 
     resnet.fc = nn.Identity()
-    embedding_model = EmbeddingModel(resnet, cnt, config['model']['embeddings'])
-
-    if config['checkpoint']:
-        embedding_model.load_state_dict(torch.load(config['checkpoint']))
+    embedding_model = EmbeddingModel(resnet, num_classes, features, embeddings)
+    if checkpoint:
+        embedding_model.load_state_dict(torch.load(checkpoint))
+        
     return embedding_model
 
 
@@ -30,14 +30,16 @@ class Backbone(nn.Module):
 
 
 class EmbeddingModel(nn.Module):
-    def __init__(self, backbone: nn.Module, last_layer=512, emb_dim=128):
+    def __init__(self, backbone: nn.Module, num_classes,  last_layer = 512, emb_dim=256):
         super().__init__()
         self.backbone = backbone
         self.embeddings = nn.Linear(last_layer, emb_dim)
-        self.softmax = nn.Softmax()
-
+        self.fc_parallel = nn.Linear(last_layer, num_classes)
+        
     def forward(self, x: torch.Tensor):
-        return self.embeddings(self.backbone(x))
+        output_embedding = self.embeddings(self.backbone(x))
+        output_fc = self.fc_parallel(self.backbone(x))
+        return output_embedding, output_fc
 
 
 class Model(nn.Module):

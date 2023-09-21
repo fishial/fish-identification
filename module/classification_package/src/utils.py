@@ -10,7 +10,7 @@ import os
 from torch.optim.lr_scheduler import LambdaLR
 from torchvision.transforms.functional import pad
 
-
+from tqdm import tqdm
 class AverageMeter(object):
     """Computes and stores the average and current value"""
 
@@ -140,19 +140,13 @@ class NewPad(object):
     def __repr__(self):
         return self.__class__.__name__ + '(padding={0}, fill={1}, padding_mode={2})'. \
             format(self.fill, self.padding_mode)
-
-def update_internal_id(records_list, labels_dict):
-    for label in records_list:
-        for k in records_list[label]:
-            k.update({'id_internal': labels_dict[label]})
             
 def get_data_config(dataset):
     labels_dict = {}
-    for sample_id, sample in enumerate(dataset):
+    for sample in tqdm(dataset):
         base_name = os.path.basename(sample['filepath'])
         width = sample['width']
         height = sample['height']
-        print(f"left: {sample_id}/{len(dataset)}", end='\r')
 
         polyline = sample['polyline']
         
@@ -209,6 +203,7 @@ def adjust_learning_rate(optimizer, epoch, lr):
 
 
 def save_checkpoint(model, path):
+    model.eval()
     torch.save(model.state_dict(), path)
 
 
