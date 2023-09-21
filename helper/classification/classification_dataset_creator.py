@@ -32,7 +32,7 @@ import fiftyone as fo
 import fiftyone.zoo as foz
 import fiftyone.brain as fob
 
-# python Object-Detection-Model/module/classification_package/src/classification_dataset_creator.py -dst_path -q -a -dsn -mei 10 -mpei 0.2 -macipc 350 -micipc 50
+# python /home/fishial/Fishial/Object-Detection-Model/helper/classification/classification_dataset_creator.py -dp /home/fishial/Fishial/dataset/export_07_09_2023/CLASSIFICATION -i /home/fishial/Fishial/dataset/export_07_09_2023/data -a /home/fishial/Fishial/dataset/export_07_09_2023/06_export_Verified_ALL.json -dsn classification-05-09-2023-v0.6 -mei 10 -mpei 0.2 -macipc 350 -micipc 50
 
 def arg_parser():
     parser = argparse.ArgumentParser()
@@ -147,7 +147,7 @@ def get_mask_by_ann(data, ann, main_folder, box = False):
     return mask
 
 def fix_poly(poly, shape):
-    poly = [ (min(max(0, point[0]), shape[1]), min(max(0, point[1]), shape[1])) for point in poly]
+    poly = [ (min(max(0, point[0]), shape[0]), min(max(0, point[1]), shape[1])) for point in poly]
     return poly
 
 def PolyArea(x,y):
@@ -241,7 +241,7 @@ def main(args):
             shape = img.shape
             if shape[0] > 2400 or shape[1] > 2400: continue
 
-            ann_inst['segmentation'] = fix_poly(ann_inst['segmentation'], shape)
+            ann_inst['segmentation'] = fix_poly(ann_inst['segmentation'], [shape[1], shape[0]])
             rect = cv2.boundingRect(np.array(ann_inst['segmentation']))
             x, y, w, h = rect
             if w < 80 or h < 80: continue
