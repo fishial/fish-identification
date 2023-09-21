@@ -27,8 +27,14 @@ def check_key(instance, key):
         return True
     
 def fix_poly(poly, shape):
-    poly = [ (min(max(0, point[0]), shape[1]), min(max(0, point[1]), shape[1])) for point in poly]
+    poly = [ (min(max(0, point[0]), shape[0]), min(max(0, point[1]), shape[1])) for point in poly]
     return poly
+
+def restore_poly(poly, width, height):
+    poly_new = []
+    for i in poly:
+        poly_new.append([int(i[0] * width), int(i[1] * height)])
+    return poly_new
 
 def PolyArea(x,y):
     return 0.5*np.abs(np.dot(x,np.roll(y,1))-np.dot(y,np.roll(x,1)))
@@ -97,7 +103,7 @@ def main(args):
             poly = [(
                 int(ann_inst['segmentation'][0][point * 2]), 
                 int(ann_inst['segmentation'][0][point * 2 + 1])) for point in range(int(len(ann_inst['segmentation'][0])/2))]
-            poly = fix_poly(poly, [images_infos[image_id]['height'], images_infos[image_id]['width']])
+            poly = fix_poly(poly, [images_infos[image_id]['width'], images_infos[image_id]['height']])
             poly = [[points[0]/images_infos[image_id]['width'], points[1]/images_infos[image_id]['height']] for points in poly]
         except Exception as e:
             continue
