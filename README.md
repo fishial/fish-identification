@@ -47,10 +47,12 @@ $ pip3 install -r requirements.txt
 | ResNet18 Fish Classification Embedding 256 V2.0  | [link](https://storage.googleapis.com/fishial-ml-resources/models_29.06.2022/full_256.ckpt) |
 | ResNet18 DataBase Tensor  | [link](https://storage.googleapis.com/fishial-ml-resources/models_29.06.2022/train%2Btest_embedding.pt) |
 | ResNet18 v4 model pack 184 classes | [link](https://storage.googleapis.com/fishial-ml-resources/classification_v5.zip) |
-| MaskRCNN Fish Segmentation (Update 15.11.2022) (latest)  | [link](https://storage.googleapis.com/fishial-ml-resources/model_15_11_2022.pth) |
+| MaskRCNN Fish Segmentation (Update 15.11.2022)  | [link](https://storage.googleapis.com/fishial-ml-resources/model_15_11_2022.pth) |
 | ResNet18 v5 model pack 184 classes | [link](https://storage.googleapis.com/fishial-ml-resources/classification_22_12.zip) |
 | ResNet18 v6 model pack 289 classes (latest) | [link](https://storage.googleapis.com/fishial-ml-resources/classification_fishial_30_06_2023.zip) |
-**in the folder with the classification model ([V6](https://storage.googleapis.com/fishial-ml-resources/classification_fishial_30_06_2023.zip)) you will find an example of a python script (runner.py) how to run the model on your images**
+| MaskRCNN Fish Segmentation (Update 21.08.2023) (latest)  | [link](https://storage.googleapis.com/fishial-ml-resources/model_21_08_2023.pth) |
+| MaskRCNN Fish Segmentation (Update 21.08.2023) (latest) torchscript  | [link](https://storage.googleapis.com/fishial-ml-resources/segmentation_21_08_2023.ts) |
+**in the folder with the classification model ([V7](https://storage.googleapis.com/fishial-ml-resources/classification_fishial_08_09_2023.zip)) you will find an example of a python script (runner.py) how to run the model on your images**
 
 ## [Train results](train_scripts/README.md)
 
