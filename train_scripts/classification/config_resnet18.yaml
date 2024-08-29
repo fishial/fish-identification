@@ -1,29 +1,23 @@
 model:
-    backbone: "resnet18"
-    embeddings: 256
+    backbone: "convnext_tiny" # "efficientnet-b0" #resnet18 - resnet50 - efficientnet-b0
+    embeddings: 128
     
-dataset:
-    train:
-        path: '/home/codahead/Fishial/FishialReaserch/datasets/fishial_75_V1.0'
-        json_path: 'data_train.json'
-    test:
-        path: '/home/codahead/Fishial/FishialReaserch/datasets/fishial_75_V1.0'
-        json_path: 'data_test.json'
-  
+dataset:  
     batchsampler:
-        classes_per_batch: 12
-        samples_per_class: 10
+        classes_per_batch: 35
+        samples_per_class: 5
 train:
     loss:
-        name: 'qudruplet'
+        name: 'pnploss'
         adaptive_margin: False
-    learning_rate: 0.012
+    learning_rate: 0.015
     momentum: 0.9
     epoch: 4000
     warmup_steps: 500
     opt_level: 'O2'
 
-output_folder: '/home/fishial/Fishial/output/classification/resnet_18_184_train_06_12'
-file_name: 'model_184'
+output_folder: '/home/fishial/Fishial/output/classification'
+file_name: 'model'
+dataset_fo: 'classification-v0.8.1_40_250_TRAIN'
 device: 'cuda'
-checkpoint: 
+checkpoint: ''

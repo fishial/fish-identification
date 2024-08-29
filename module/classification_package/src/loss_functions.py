@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from pytorch_metric_learning import losses, miners, trainers, samplers
+from pytorch_metric_learning.samplers import MPerClassSampler
 
 class MultiSimilarityLoss(nn.Module):
     def __init__(self):
@@ -46,6 +48,57 @@ class MultiSimilarityLoss(nn.Module):
         return loss
 
 
+class WrapperOHNM(nn.Module):
+    def __init__(self):
+        super(WrapperOHNM, self).__init__()
+        
+        self.p = 2
+        self.margin = 0.1
+        self.eps = 1e-7
+        
+        self.loss_func = losses.TripletMarginLoss(margin=self.margin)
+        self.miner = miners.TripletMarginMiner(margin=self.margin, type_of_triplets="all")
+      
+    def forward(self, feats, labels):
+        assert feats.size(0) == labels.size(0), \
+            f"feats.size(0): {feats.size(0)} is not equal to labels.size(0): {labels.size(0)}"
+        batch_size = feats.size(0)
+        
+        hard_triplets = self.miner(feats, labels)
+        loss = self.loss_func(feats, labels, hard_triplets)
+        return loss
+    
+
+class WrapperAngular(nn.Module):
+    def __init__(self):
+        super(WrapperAngular, self).__init__()
+        
+     
+        self.loss_func = losses.AngularLoss()
+        self.miner = miners.AngularMiner()
+      
+    def forward(self, feats, labels):
+
+        hard_triplets = self.miner(feats, labels)
+        print(f"hard_triplets: {len(hard_triplets)} {hard_triplets[0].shape}")
+        loss = self.loss_func(feats, labels, hard_triplets)
+        return loss
+    
+    
+class WrapperPNPLoss(nn.Module):
+    def __init__(self):
+        super(WrapperPNPLoss, self).__init__()
+        
+     
+        self.loss_func = losses.PNPLoss()
+      
+    def forward(self, feats, labels):
+
+        loss = self.loss_func(feats, labels)
+        return loss
+    
+    
+    
 class QuadrupletLoss(object):
 
     def __init__(self, adaptive_margin=True):

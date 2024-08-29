@@ -1,7 +1,7 @@
 import sys
 
 # Change path specificly to your directories
-sys.path.insert(1, '/home/codahead/Fishial/FishialReaserch')
+sys.path.insert(1, '/home/andrew/Andrew/fish-identification')
 
 import pandas as pd
 import collections
@@ -52,7 +52,7 @@ class FishialDatasetFoOnlineCuting(Dataset):
     
         self.n_classes = len(set([i['name'] for i in self.data_compleated]))
         self.targets = [i['id_internal'] for i in self.data_compleated]
-        
+        self.annotation_ids = [i['id'] for i in self.data_compleated]
         
     def __get_margin(self, poly):
         # create example polygon
@@ -102,7 +102,7 @@ class FishialDatasetFoOnlineCuting(Dataset):
     
     def __get_cropped_rect(self, img_path):
 
-        img_path = self.data_compleated[idx]['file_name']
+#         img_path = self.data_compleated[idx]['file_name']
         image = cv2.imread(img_path)
         return image
     
@@ -415,12 +415,10 @@ class BalancedBatchSampler(BatchSampler):
     """
     Returns batches of size n_classes * n_samples
     """
-
-    def __init__(self, dataset, n_classes, n_samples):
-        loader = DataLoader(dataset)
-        self.labels_list = []
-        for _, label in loader: # image_tensor, label, dict_description
-            self.labels_list.append(label)
+    
+    def __init__(self, labels_list, n_classes, n_samples):
+        
+        self.labels_list = labels_list
             
         self.labels = torch.LongTensor(self.labels_list)
         self.labels_set = list(set(self.labels.numpy()))
@@ -432,24 +430,23 @@ class BalancedBatchSampler(BatchSampler):
         self.count = 0
         self.n_classes = n_classes
         self.n_samples = n_samples
-        self.dataset = dataset
-        self.batch_size = self.n_samples * self.n_classes
 
+        self.batch_size = self.n_samples * self.n_classes
+        
     def __iter__(self):
         self.count = 0
-        while self.count + self.batch_size < len(self.dataset):
+        while self.count + self.batch_size < len(self.labels_list):
             classes = np.random.choice(self.labels_set, self.n_classes, replace=False)
             indices = []
             for class_ in classes:
                 indices.extend(self.label_to_indices[class_][
-                               self.used_label_indices_count[class_]:self.used_label_indices_count[
-                                                                         class_] + self.n_samples])
+                               self.used_label_indices_count[class_]:self.used_label_indices_count[ class_] + self.n_samples])
                 self.used_label_indices_count[class_] += self.n_samples
                 if self.used_label_indices_count[class_] + self.n_samples > len(self.label_to_indices[class_]):
                     np.random.shuffle(self.label_to_indices[class_])
                     self.used_label_indices_count[class_] = 0
             yield indices
             self.count += self.n_classes * self.n_samples
-
+            
     def __len__(self):
-        return len(self.dataset) // self.batch_size
+        return len(self.labels_list) // self.batch_size
