@@ -1,6 +1,10 @@
 
 # Fishial.ai
 
+<a target="_blank" href="https://colab.research.google.com/drive/1nKJ0V1sBLgfNJaCTQmuqUV1ybrx1m7qI?usp=sharing">
+  <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
+</a>
+
 This project includes training and validation scripts for the fish segmentation and classification model.
 
 [Demo web aplication](https://portal.fishial.ai/search/by-fishial-recognition)
@@ -49,10 +53,13 @@ $ pip3 install -r requirements.txt
 | ResNet18 v4 model pack 184 classes | [link](https://storage.googleapis.com/fishial-ml-resources/classification_v5.zip) |
 | MaskRCNN Fish Segmentation (Update 15.11.2022)  | [link](https://storage.googleapis.com/fishial-ml-resources/model_15_11_2022.pth) |
 | ResNet18 v5 model pack 184 classes | [link](https://storage.googleapis.com/fishial-ml-resources/classification_22_12.zip) |
-| ResNet18 v6 model pack 289 classes (latest) | [link](https://storage.googleapis.com/fishial-ml-resources/classification_fishial_30_06_2023.zip) |
-| MaskRCNN Fish Segmentation (Update 21.08.2023) (latest)  | [link](https://storage.googleapis.com/fishial-ml-resources/model_21_08_2023.pth) |
-| MaskRCNN Fish Segmentation (Update 21.08.2023) (latest) torchscript  | [link](https://storage.googleapis.com/fishial-ml-resources/segmentation_21_08_2023.ts) |
-**in the folder with the classification model ([V7](https://storage.googleapis.com/fishial-ml-resources/classification_fishial_08_09_2023.zip)) you will find an example of a python script (runner.py) how to run the model on your images**
+| ResNet18 v6 model pack 289 classes| [link](https://storage.googleapis.com/fishial-ml-resources/classification_fishial_30_06_2023.zip) |
+| MaskRCNN Fish Segmentation (Update 21.08.2023) | [link](https://storage.googleapis.com/fishial-ml-resources/model_21_08_2023.pth) |
+| MaskRCNN Fish Segmentation (Update 21.08.2023)  torchscript  | [link](https://storage.googleapis.com/fishial-ml-resources/segmentation_21_08_2023.ts) |
+| Fish Detector BoundingBox - model YOLOv10 medium image size 640  (latest) torchscript  | [link](https://storage.googleapis.com/fishial-ml-resources/detector_v10_m3.zip) |
+| Fish classification BackBone "convnext tiny" embeding size 128, class count: 426 (latest) torchscript  | [link](https://storage.googleapis.com/fishial-ml-resources/classification_rectangle_v7-1.zip) |
+| Fish Segmentation Model backbone ResNet18, image size 416 classes: 0/1 (background/foreground) (latest) torchscript  | [link](https://storage.googleapis.com/fishial-ml-resources/segmentator_fpn_res18_416_1.zip) |
+
 
 ## [Train results](train_scripts/README.md)
 
