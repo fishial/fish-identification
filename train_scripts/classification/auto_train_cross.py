@@ -1,138 +1,171 @@
-import sys
-
-# Change path specificly to your directories
-sys.path.insert(1, '')
-
 import os
-import yaml
-import torch
+import sys
+import json
 import logging
 import argparse
-
 from datetime import datetime
 
+import torch
 import torchvision.models as models
-
-from apex import amp
-
+import fiftyone as fo
 from PIL import Image
-from torchvision import transforms
-
 from torch import nn
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
-
-from pytorch_metric_learning import losses, miners, trainers, samplers
+from pytorch_metric_learning import samplers
 from pytorch_metric_learning.samplers import MPerClassSampler
 from torch.utils.data.sampler import BatchSampler
 
-from module.classification_package.src.utils import WarmupCosineSchedule
+# Apex for mixed precision training
+from apex import amp
+
+# Import custom modules
+sys.path.insert(1, '')  # Change path if needed
+from module.classification_package.src.utils import (
+    WarmupCosineSchedule, find_device, save_json, get_data_config
+)
 from module.classification_package.src.model import init_model
 from module.classification_package.src.dataset import FishialDatasetFoOnlineCuting
-from module.classification_package.src.dataset import BalancedBatchSampler
-from module.classification_package.src.utils import find_device
-from module.classification_package.src.loss_functions import *
-from module.classification_package.src.utils import NewPad
-from module.classification_package.src.utils import get_data_config
 from module.classification_package.src.train import train
-from module.classification_package.src.utils import read_json, save_json
 
-import fiftyone as fo
+
+# ============== CONFIGURATION ==============
+logging.basicConfig(
+    format='%(asctime)s - %(levelname)s - %(name)s - %(message)s',
+    datefmt='%m/%d/%Y %H:%M:%S',
+    level=logging.INFO
+)
 logger = logging.getLogger(__name__)
 
-# Setup logging
-logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s - %(message)s',
-                    datefmt='%m/%d/%Y %H:%M:%S',
-                    level=logging.INFO)
+
+def parse_args():
+    """Parse command-line arguments."""
+    parser = argparse.ArgumentParser(description="Train a classification model.")
+
+    # Dataset and paths
+    parser.add_argument("--dataset", type=str, required=True, help="FiftyOne dataset name")
+    parser.add_argument("--output_dir", type=str, default="/home/fishial/Fishial/output/classification",
+                        help="Directory to save training outputs")
+    parser.add_argument("--checkpoint", type=str, default=None, help="Path to model checkpoint")
+
+    # Training hyperparameters
+    parser.add_argument("--epochs", type=int, default=500, help="Number of training epochs")
+    parser.add_argument("--batch_size", type=int, default=150, help="Batch size for training")
+    parser.add_argument("--classes_per_batch", type=int, default=30, help="Number of classes per batch")
+    parser.add_argument("--samples_per_class", type=int, default=5, help="Number of samples per class")
+    parser.add_argument("--lr", type=float, default=3e-2, help="Initial learning rate")
+
+    # Model and optimizer settings
+    parser.add_argument("--backbone", type=str, default="convnext_tiny", help="Backbone model name")
+    parser.add_argument("--embedding_size", type=int, default=128, help="Size of embedding layer")
+
+    return parser.parse_args()
 
 
-device = find_device()
+def prepare_dataset(dataset_name):
+    """Load FiftyOne dataset and split into train/val."""
+    logger.info(f"Loading FiftyOne dataset: {dataset_name}")
+    fo_dataset = fo.load_dataset(dataset_name)
+    train_data = fo_dataset.match_tags("train")
+    val_data = fo_dataset.match_tags("val")
 
-epoch = 500
-n_classes_per_batch = 30
-n_samples_per_class = 5
-dataset_fo = 'classification-v0.8.1_40_250_TRAIN'
-output_folder = '/home/fishial/Fishial/output/classification'
-checkpoint = r'/home/fishial/Fishial/output/classification/classification-v0.8.1_40_250_TRAIN/pnploss/2024_08_12_08_53_42/best_ckpt_0.8908494185165342.ckpt'
+    train_records = get_data_config(train_data)
+    val_records = get_data_config(val_data)
 
-fo_dataset = fo.load_dataset(dataset_fo)
-train_data = fo_dataset.match_tags("train")
-train_val = fo_dataset.match_tags("val")
+    label_to_id = {label: idx for idx, label in enumerate(train_records)}
+    id_to_label = {idx: label for idx, label in enumerate(train_records)}
 
-train_records = get_data_config(train_data)
-val_records = get_data_config(train_val)
+    return train_records, val_records, label_to_id, id_to_label
 
-label_to_id = {label:label_id for label_id, label in enumerate(list(train_records))}
-id_to_label = {label_id:label for label_id, label in enumerate(list(train_records))}
-    
-output_folder = os.path.join(
-        output_folder, 
-        dataset_fo, 
-        'cross_entropy', 
-        datetime.now().strftime('%Y-%m-%d-%H:%M:%S')
+
+def prepare_dataloader(train_records, val_records, label_to_id, batch_size, classes_per_batch, samples_per_class):
+    """Prepare DataLoader with balanced batch sampling."""
+    logger.info("Initializing dataset and DataLoader...")
+
+    train_dataset = FishialDatasetFoOnlineCuting(
+        train_records, label_to_id, train_state=True,
+        transform=torchvision.transforms.Compose([
+            torchvision.transforms.Resize((224, 224), Image.BILINEAR),
+            torchvision.transforms.RandomAutocontrast(),
+            torchvision.transforms.RandomHorizontalFlip(),
+            torchvision.transforms.RandomVerticalFlip(),
+            torchvision.transforms.ToTensor(),
+            torchvision.transforms.RandomErasing(p=0.358, scale=(0.05, 0.4), ratio=(0.05, 6.1), value=0),
+            torchvision.transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+        ]),
+        crop_type='rect'
     )
     
-os.makedirs(output_folder, exist_ok=True)
-    
-save_json(id_to_label,os.path.join(output_folder, 'labels.json'))
-    
-ds_train = FishialDatasetFoOnlineCuting(
-        train_records,
-        label_to_id,
-        train_state=True,
-        transform=transforms.Compose([transforms.Resize((224, 224), Image.BILINEAR),
-                                      transforms.RandomAutocontrast(),
-                                      transforms.RandomHorizontalFlip(),
-                                      transforms.RandomVerticalFlip(),
-                                      transforms.ToTensor(),
-                                      transforms.RandomErasing(p=0.358, scale=(0.05, 0.4), ratio=(0.05, 6.1),
-                                                               value=0, inplace=False),
-                                      transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])]),
-    crop_type = 'rect')
+    val_dataset = FishialDatasetFoOnlineCuting(
+        val_records, label_to_id,
+        transform=torchvision.transforms.Compose([
+            torchvision.transforms.Resize((224, 224), Image.BILINEAR),
+            torchvision.transforms.ToTensor(),
+            torchvision.transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+        ]),
+        crop_type='rect'
+    )
 
-print(f'ds_train.n_classes: {ds_train.n_classes}')
+    logger.info(f"Number of training classes: {train_dataset.n_classes}")
+    logger.info(f"Number of validation classes: {val_dataset.n_classes}")
 
-ds_val = FishialDatasetFoOnlineCuting(
-    val_records,
-    label_to_id,
-    transform=transforms.Compose([
-        transforms.Resize((224, 224), Image.BILINEAR),
-        transforms.ToTensor(),
-        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])]),
-    crop_type = 'rect')
-print(f'ds_val.n_classes: {ds_val.n_classes}')
+    sampler = MPerClassSampler(
+        train_dataset.targets, m=samples_per_class, batch_size=batch_size, length_before_new_iter=len(train_dataset)
+    )
+    batch_sampler = BatchSampler(sampler, batch_size=batch_size, drop_last=False)
 
-batch_size = n_classes_per_batch * n_samples_per_class
+    train_loader = DataLoader(train_dataset, batch_sampler=batch_sampler, num_workers=4, pin_memory=True)
 
-sampler = samplers.MPerClassSampler(ds_train.targets, m=n_samples_per_class
-                                    ,batch_size=batch_size, length_before_new_iter=len(ds_train))
-batch_sampler = BatchSampler(sampler, batch_size = batch_size, drop_last = False)
-
-data_loader_train = DataLoader(ds_train, batch_sampler=batch_sampler,
-                               num_workers=4,
-                               pin_memory=True)  # Construct your Dataloader here
-
-n_classes = ds_val.n_classes
-
-model = init_model(427, embeddings = 128, backbone_name='convnext_tiny', checkpoint_path = checkpoint, device = device)
-model.to(device)
-    
-loss_fn = nn.CrossEntropyLoss()
-
-opt = torch.optim.SGD(model.parameters(),
-                      lr=3e-2,
-                      momentum=0.9,
-                      weight_decay=0)
-
-scheduler = WarmupCosineSchedule(opt, warmup_steps=500, t_total=epoch * len(data_loader_train))
-model, opt = amp.initialize(models=model, optimizers=opt, opt_level='O2')
-
-amp._amp_state.loss_scalers[0]._loss_scale = 2 ** 20
+    return train_loader, val_dataset
 
 
-train(scheduler, epoch, opt, model, data_loader_train, ds_val, device, ['accuracy'], loss_fn,
-      logging,
-      eval_every=5,
-      file_name='model',
-      output_folder=output_folder,
-     extra_val = None)
+def setup_training(model_checkpoint, num_classes, embedding_size, backbone, lr, epochs, train_loader):
+    """Initialize model, optimizer, and scheduler."""
+    logger.info("Initializing model and optimizer...")
+    device = find_device()
+
+    model = init_model(num_classes, embeddings=embedding_size, backbone_name=backbone,
+                       checkpoint_path=model_checkpoint, device=device)
+    model.to(device)
+
+    loss_fn = nn.CrossEntropyLoss()
+
+    optimizer = torch.optim.SGD(model.parameters(), lr=lr, momentum=0.9, weight_decay=0)
+    scheduler = WarmupCosineSchedule(optimizer, warmup_steps=500, t_total=epochs * len(train_loader))
+
+    model, optimizer = amp.initialize(models=model, optimizers=optimizer, opt_level="O2")
+    amp._amp_state.loss_scalers[0]._loss_scale = 2 ** 20
+
+    return model, optimizer, scheduler, loss_fn
+
+
+def main():
+    """Main function to run the classification training pipeline."""
+    args = parse_args()
+    device = find_device()
+
+    train_records, val_records, label_to_id, id_to_label = prepare_dataset(args.dataset)
+
+    output_folder = os.path.join(
+        args.output_dir, args.dataset, "cross_entropy", datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
+    )
+    os.makedirs(output_folder, exist_ok=True)
+
+    save_json(id_to_label, os.path.join(output_folder, "labels.json"))
+
+    train_loader, val_dataset = prepare_dataloader(
+        train_records, val_records, label_to_id, args.batch_size, args.classes_per_batch, args.samples_per_class
+    )
+
+    model, optimizer, scheduler, loss_fn = setup_training(
+        args.checkpoint, val_dataset.n_classes, args.embedding_size, args.backbone, args.lr, args.epochs, train_loader
+    )
+
+    train(
+        scheduler, args.epochs, optimizer, model, train_loader, val_dataset, device, ["accuracy"],
+        loss_fn, logging, eval_every=5, file_name="model", output_folder=output_folder, extra_val=None
+    )
+
+
+if __name__ == "__main__":
+    main()
