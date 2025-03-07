@@ -12,8 +12,6 @@ import fiftyone as fo
 from tqdm import tqdm
 
 # ============== CONFIGURATION ==============
-DEFAULT_FO_DATASET = "SEGM-2024-V0.8"
-DEFAULT_OUTPUT_DIR = "yolo_dataset"
 DEFAULT_CLASSES = ["Fish"]  # Modify if multiple classes exist
 
 # Setup logging
@@ -25,10 +23,10 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 def parse_arguments():
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(description="Prepare FiftyOne dataset for YOLO training.")
-
-    parser.add_argument("--dataset", type=str, default=DEFAULT_FO_DATASET,
+    
+    parser.add_argument("--dataset", type=str, required=True,
                         help="Name of the FiftyOne dataset to process.")
-    parser.add_argument("--output_dir", type=str, default=DEFAULT_OUTPUT_DIR,
+    parser.add_argument("--output_dir", type=str, required=True,
                         help="Directory to save the YOLO-formatted dataset.")
     parser.add_argument("--split_train_val", action="store_true",
                         help="Split dataset into train/val based on FiftyOne tags.")

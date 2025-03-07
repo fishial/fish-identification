@@ -145,7 +145,7 @@ class FishialSegmentDatasetFoOnlineCutting(torch.utils.data.Dataset):
         """Prepare dataset by filtering and extracting bounding box data."""
         processed_data = []
         skip_count = 0
-
+        
         for sample in tqdm(self.data_fo, desc="Processing dataset"):
             width, height = sample["width"], sample["height"]
             polylines = sample["General body shape"].polylines

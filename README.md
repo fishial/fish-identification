@@ -19,6 +19,14 @@ Install the dependencies.
 $ pip3 install -r requirements.txt
 ```
 
+## Run scripts:
+
+chmod +x segmentation.sh classification.sh object_detection.sh
+
+./segmentation.sh -c <your_coco_file> -i <your_images_dir> -d <your_segmentation_ds_name> -s <your_save_dir>
+./classification.sh -p <your_classif_images_dir> -i <your_classif_input_dir> -a <your_annotation_file> -n <your_classification_ds_name>
+./object_detection.sh -d <your_detection_ds> -o <your_yolo_output_dir> -n <num_classes> -y <data_yaml> -p <project_dir> -r <run_name>
+
 ## Getting Started
 
 * [https://colab.research.google.com/drive/1nKJ0V1sBLgfNJaCTQmuqUV1ybrx1m7qI?usp=sharing](Runner.ipynb) This jupyter notebook allows you to run segmentation and classification neural networks on Google Cloud or your computer, after downloading the files from the links below.

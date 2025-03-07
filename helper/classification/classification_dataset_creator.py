@@ -1,288 +1,464 @@
+#!/usr/bin/env python3
+"""
+Script to create a classification dataset from COCO annotations.
+
+This script processes annotations, extracts image crops, normalizes polygon segmentation,
+and creates a FiftyOne dataset with polyline annotations. All parameters (paths, dataset name, etc.)
+are provided via command-line arguments.
+"""
+
 import os
 import sys
-#Change path specificly to your directories
-sys.path.insert(1, '/home/fishial/Fishial/Object-Detection-Model')
-                
-import cv2
-import json
-import copy
-import pandas
-import random
-import argparse
-import requests
-import numpy as np
-from PIL import Image
 
-from tqdm import tqdm
-from torchvision import transforms
+# Modify sys.path to include the root directory containing 'fish-identification'
+CURRENT_FOLDER_PATH = os.path.abspath(__file__)
+DELIMITER = 'fish-identification'
+pos = CURRENT_FOLDER_PATH.find(DELIMITER)
+if pos != -1:
+    sys.path.insert(1, CURRENT_FOLDER_PATH[:pos + len(DELIMITER)])
+    print("SETUP: sys.path updated")
+    
+import argparse
+import json
 from concurrent.futures import ThreadPoolExecutor
 
-from os import listdir, walk
-from os.path import isfile, join
-from module.classification_package.src.utils import read_json, save_json
-from module.classification_package.src.dataset import FishialDataset
-from module.segmentation_package.src.utils import get_mask
-
-from shapely.geometry import Point
-from shapely.geometry.polygon import Polygon
-
+import cv2
+import numpy as np
+import pandas as pd
+from PIL import Image
+from tqdm import tqdm
+from torchvision import transforms
+import requests
 import matplotlib.pyplot as plt
-# import FiftyOne
+
 import fiftyone as fo
 import fiftyone.zoo as foz
 import fiftyone.brain as fob
 
-# python /home/fishial/Fishial/Object-Detection-Model/helper/classification/classification_dataset_creator.py -dp /home/fishial/Fishial/dataset/export_07_09_2023/CLASSIFICATION -i /home/fishial/Fishial/dataset/export_07_09_2023/data -a /home/fishial/Fishial/dataset/export_07_09_2023/06_export_Verified_ALL.json -dsn classification-05-09-2023-v0.6 -mei 10 -mpei 0.2 -macipc 350 -micipc 50
+from shapely.geometry import Point
+from shapely.geometry.polygon import Polygon
 
-def arg_parser():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-dp', '--dst_path', type=str, help="The folder when will be saved annotation file and croped images")
-    parser.add_argument('-i','--path_to_full_images', type=str, help="The folder when storaged images from coco file")
-    
-    parser.add_argument('-a','--path_to_src_coco_json', type=str)
-    parser.add_argument('-dsn','--voxel_dataset_name', type=str)
-    
-    parser.add_argument("-mei", "--min_eval_img", type=int, default=10,
-                    help="The minimal number of evaluate images in dataset per class")
-    parser.add_argument("-mpei", "--max_percent_eva_img", type=float, default=0.2,
-                    help="The maximal percent of evaluate images in dataset per class")
-    parser.add_argument("-macipc", "--max_cnt_img_per_class", type=int, default=350,
-                    help="The maximal number of images per class")
-    parser.add_argument("-micipc", "--min_cnt_img", type=int, default=50,
-                    help="The maximal number of images per class")
-    return parser
+# Import utility functions from classification and segmentation packages
+from module.classification_package.src.utils import read_json, save_json
+from module.classification_package.src.dataset import FishialDataset
+from module.segmentation_package.src.utils import get_mask
+
+# Modify sys.path to include the root directory containing 'fish-identification'
+CURRENT_FOLDER_PATH = os.path.abspath(__file__)
+DELIMITER = 'fish-identification'
+pos = CURRENT_FOLDER_PATH.find(DELIMITER)
+if pos != -1:
+    sys.path.insert(1, CURRENT_FOLDER_PATH[:pos + len(DELIMITER)])
+    print("SETUP: sys.path updated")
 
 
-def get_category_name(data):
+def parse_arguments() -> argparse.Namespace:
+    """
+    Parse command-line arguments.
+
+    Returns:
+        argparse.Namespace: Parsed command-line arguments.
+    """
+    parser = argparse.ArgumentParser(
+        description="Create a classification dataset from COCO annotations"
+    )
+    parser.add_argument('-dp', '--dst_path', type=str, required=True,
+                        help="Destination folder for annotation file and cropped images")
+    parser.add_argument('-i', '--path_to_full_images', type=str, required=True,
+                        help="Folder containing full images")
+    parser.add_argument('-a', '--path_to_src_coco_json', type=str, required=True,
+                        help="Path to the source COCO JSON file")
+    parser.add_argument('-dsn', '--voxel_dataset_name', type=str, required=True,
+                        help="Name for the voxel dataset")
+    parser.add_argument("--min_eval_img", type=int, default=10,
+                        help="Minimum number of evaluation images per class")
+    parser.add_argument("--max_percent_eva_img", type=float, default=0.2,
+                        help="Maximum percentage of evaluation images per class")
+    parser.add_argument("--max_cnt_img_per_class", type=int, default=350,
+                        help="Maximum number of images per class")
+    parser.add_argument("--min_cnt_img", type=int, default=50,
+                        help="Minimum number of images per class")
+    return parser.parse_args()
+
+
+def get_category_names(data: dict) -> dict:
+    """
+    Extract valid category names and counts from COCO data for 'General body shape'.
+
+    Args:
+        data (dict): COCO formatted data.
+
+    Returns:
+        dict: Mapping of category id to a dictionary containing 'name' (supercategory) and 'cnt'.
+    """
     category_ids = {}
-    for idx, i in enumerate(data['categories']):
-        if i['name'] == 'General body shape':
-            if i['id'] not in category_ids:
-                category_ids.update({
-                    i['id']: {
-                        'name': i['supercategory'],
-                        'cnt': 0
-                    }
-                })
+    for item in data.get('categories', []):
+        if item.get('name') == 'General body shape':
+            cat_id = item.get('id')
+            if cat_id not in category_ids:
+                category_ids[cat_id] = {'name': item.get('supercategory'), 'cnt': 1}
             else:
-                category_ids[i['id']]['cnt'] += 1
+                category_ids[cat_id]['cnt'] += 1
     return category_ids
 
-def get_category_cnt(data):
+
+def get_category_counts(data: dict) -> dict:
+    """
+    Count annotations per category in COCO data.
+
+    Args:
+        data (dict): COCO formatted data.
+
+    Returns:
+        dict: Mapping of category id to count of annotations.
+    """
     category_cnt = {}
-    for i in data['annotations']:
-        if 'category_id' in i:
-            if i['category_id'] not in category_cnt:
-                category_cnt.update({
-                    i['category_id']: {
-                        'cnt': 0
-                    }
-                })
-            else:
-                category_cnt[i['category_id']]['cnt'] += 1
+    for ann in data.get('annotations', []):
+        cat_id = ann.get('category_id')
+        if cat_id is not None:
+            category_cnt[cat_id] = category_cnt.get(cat_id, 0) + 1
     return category_cnt
 
-def get_class_with_min_ann(data, min_ann = 50):
-    data_dict = []
-    for i in data:
-        if data[i]['cnt'] >= min_ann:
-            data_dict.append([i, data[i]['cnt']])
-    return data_dict
 
-def find_image_by_id(id: int):
-    for i in data['images']:
-        if i['id'] == id:
-            return i
+def get_classes_with_min_annotations(category_counts: dict, min_ann: int = 50) -> list:
+    """
+    Get list of category ids that have at least min_ann annotations.
 
-def get_list_of_files_in_folder(path):
-    list_of_files = []
-    for (dirpath, dirnames, filenames) in walk(path):
-        list_of_files.extend(filenames)
-        break
-    return list_of_files
+    Args:
+        category_counts (dict): Mapping of category id to annotation count.
+        min_ann (int): Minimum required annotations.
 
-def download(url):
-    r = requests.get(url[0], allow_redirects=True)  # to get content after redirection
-    with open(url[1], 'wb') as f:
+    Returns:
+        list: List of tuples (category_id, count) meeting the minimum requirement.
+    """
+    return [(cat_id, cnt) for cat_id, cnt in category_counts.items() if cnt >= min_ann]
+
+
+def find_image_by_id(image_id: int, data: dict) -> dict:
+    """
+    Find an image entry in COCO data by its id.
+
+    Args:
+        image_id (int): ID of the image.
+        data (dict): COCO formatted data.
+
+    Returns:
+        dict: Image entry dictionary if found, otherwise None.
+    """
+    for img in data.get('images', []):
+        if img.get('id') == image_id:
+            return img
+    return None
+
+
+def get_list_of_files_in_folder(path: str) -> list:
+    """
+    Get list of file names in the given folder.
+
+    Args:
+        path (str): Directory path.
+
+    Returns:
+        list: List of file names.
+    """
+    return next(os.walk(path))[2]
+
+
+def download_file(download_info: tuple) -> None:
+    """
+    Download a file from a URL and save it to a specified path.
+
+    Args:
+        download_info (tuple): Tuple containing (url, save_path, progress_info).
+    """
+    url, save_path, progress_info = download_info
+    r = requests.get(url, allow_redirects=True)
+    with open(save_path, 'wb') as f:
         f.write(r.content)
-    print("Current: {}".format(url[2]), end='\r')
-    
-def get_image(data, folder_main, id):
-    for img in data['images']:
-        if img['id'] == id:
-            return cv2.imread(os.path.join(folder_main, img['file_name']))
-        
-def get_valid_category(data):
+    print(f"Downloading {progress_info}", end='\r')
+
+
+def get_image(data: dict, folder_main: str, image_id: int) -> np.ndarray:
+    """
+    Retrieve an image from disk using its entry in COCO data.
+
+    Args:
+        data (dict): COCO formatted data.
+        folder_main (str): Folder containing the images.
+        image_id (int): ID of the image.
+
+    Returns:
+        np.ndarray: Image array read by cv2, or None if not found.
+    """
+    img_entry = find_image_by_id(image_id, data)
+    if img_entry:
+        img_path = os.path.join(folder_main, img_entry.get('file_name', ''))
+        return cv2.imread(img_path)
+    return None
+
+
+def get_valid_categories(data: dict) -> dict:
+    """
+    Extract valid categories for segmentation based on criteria:
+    - Category name is 'General body shape'
+    - Supercategory is not 'unknown'
+
+    Args:
+        data (dict): COCO formatted data.
+
+    Returns:
+        dict: Mapping of valid category id to its supercategory.
+    """
     valid_category = {}
-    for z in data['categories']:
-        if z['name'] == 'General body shape' and z['supercategory'] != 'unknown':
-            valid_category.update({z['id']: z['supercategory']})
+    for cat in data.get('categories', []):
+        if cat.get('name') == 'General body shape' and cat.get('supercategory') != 'unknown':
+            valid_category[cat.get('id')] = cat.get('supercategory')
     return valid_category
 
-def get_all_ann_by_img_id(data_full, img_id, valid_category):
-    list_off_ann_for_specific_image = []
-    for i in data_full['annotations']:
-        try:
-            if i['image_id'] == img_id and i['category_id'] in valid_category:
-                list_off_ann_for_specific_image.append(i)
-        except:
-            pass
-    return list_off_ann_for_specific_image
 
-def get_mask_by_ann(data, ann, main_folder, box = False):
-    polygon_tmp = []
-    for pt in range(int(len(ann['segmentation'][0])/2)):
-        polygon_tmp.append([int(ann['segmentation'][0][pt * 2]), int(ann['segmentation'][0][pt * 2 + 1])])
+def get_annotations_for_image(data_full: dict, img_id: int, valid_category: dict) -> list:
+    """
+    Get all annotations for a specific image id that belong to valid categories.
 
-    img = get_image(data, main_folder, ann['image_id'])
+    Args:
+        data_full (dict): Full COCO data.
+        img_id (int): Image ID.
+        valid_category (dict): Mapping of valid category ids.
+
+    Returns:
+        list: List of annotations for the image.
+    """
+    annotations = []
+    for ann in data_full.get('annotations', []):
+        if ann.get('image_id') == img_id and ann.get('category_id') in valid_category:
+            annotations.append(ann)
+    return annotations
+
+
+def get_mask_by_annotation(data: dict, ann: dict, main_folder: str, box: bool = False) -> np.ndarray:
+    """
+    Generate a mask for an annotation either by cropping the bounding box or using a segmentation mask.
+
+    Args:
+        data (dict): COCO formatted data.
+        ann (dict): Annotation dictionary.
+        main_folder (str): Folder containing the images.
+        box (bool): If True, return bounding box crop; otherwise, return segmentation mask.
+
+    Returns:
+        np.ndarray: Mask image, or None if mask could not be created.
+    """
+    segmentation = ann.get('segmentation', [])
+    if not segmentation:
+        return None
+    # If segmentation is nested, extract the first element
+    seg = segmentation[0] if isinstance(segmentation[0], list) else segmentation
+
+    polygon_points = [(int(seg[i]), int(seg[i + 1])) for i in range(0, len(seg), 2)]
+    img = get_image(data, main_folder, ann.get('image_id'))
+    if img is None:
+        return None
+
     if box:
-        rect = cv2.boundingRect(np.array(polygon_tmp))
+        rect = cv2.boundingRect(np.array(polygon_points))
         x, y, w, h = rect
         mask = img[y:y + h, x:x + w].copy()
-        if len(mask) == 0:
+        if mask.size == 0:
             return None
     else:
-        mask = get_mask(img, np.array(polygon_tmp))
-    
+        mask = get_mask(img, np.array(polygon_points))
     return mask
 
-def fix_poly(poly, shape):
-    poly = [ (min(max(0, point[0]), shape[0]), min(max(0, point[1]), shape[1])) for point in poly]
-    return poly
 
-def PolyArea(x,y):
-    return 0.5*np.abs(np.dot(x,np.roll(y,1))-np.dot(y,np.roll(x,1)))
+def fix_polygon(poly: list, shape: list) -> list:
+    """
+    Adjust polygon points to ensure they lie within image boundaries.
+
+    Args:
+        poly (list): List of (x, y) tuples representing polygon points.
+        shape (list): [width, height] of the image.
+
+    Returns:
+        list: Clamped polygon points.
+    """
+    width, height = shape
+    return [(min(max(0, x), width), min(max(0, y), height)) for x, y in poly]
 
 
-def main(args):
-    
-    VOXEL_DATASET_NAME = args.voxel_dataset_name
+def polygon_area(x: list, y: list) -> float:
+    """
+    Calculate the area of a polygon given x and y coordinates using the shoelace formula.
 
+    Args:
+        x (list): List of x coordinates.
+        y (list): List of y coordinates.
+
+    Returns:
+        float: Area of the polygon.
+    """
+    return 0.5 * np.abs(np.dot(x, np.roll(y, 1)) - np.dot(y, np.roll(x, 1)))
+
+
+def process_annotations(args: argparse.Namespace) -> None:
+    """
+    Process annotations from COCO JSON, extract valid image annotations, crop images, 
+    normalize polygon coordinates, and create a FiftyOne dataset.
+
+    Args:
+        args (argparse.Namespace): Parsed command-line arguments.
+    """
+    voxel_dataset_name = args.voxel_dataset_name
     dst_path = args.dst_path
-    path_to_src_coco_json =  args.path_to_src_coco_json
-    
-    PATH_FULL_IMAGES = args.path_to_full_images
-
-    min_eval_img = args.min_eval_img
-    max_percent_eva_img = args.max_percent_eva_img
-    max_cnt_img_per_class = args.max_cnt_img_per_class
+    path_to_src_coco_json = args.path_to_src_coco_json
+    path_full_images = args.path_to_full_images
     min_cnt_img = args.min_cnt_img
 
-    list_of_files = get_list_of_files_in_folder(PATH_FULL_IMAGES)
+    # List files in the images folder and read JSON data
+    list_of_files = get_list_of_files_in_folder(path_full_images)
     data_full = read_json(path_to_src_coco_json)
 
+    # Create destination folder for cropped images
     folder_to_save_files = os.path.join(dst_path, 'images')
     os.makedirs(folder_to_save_files, exist_ok=True)
 
-    list_of_valid_img = {}
-    print(f"MAIN FOLDER PATH: {PATH_FULL_IMAGES}")
-    print(f"LIST OF FILES IN MAIN FOLDER: {len(list_of_files)}")
+    # Filter valid images (exist on disk and not flagged as invalid)
+    valid_images = {}
+    print(f"MAIN FOLDER PATH: {path_full_images}")
+    print(f"Total files in folder: {len(list_of_files)}")
+    for img in data_full.get('images', []):
+        if img.get('is_invalid'):
+            continue
+        if img.get('file_name') in list_of_files:
+            valid_images[img.get('id')] = img
+    print(f"Number of valid images: {len(valid_images)}")
 
-    for i in data_full['images']:
-        if 'is_invalid' in i:
-            if i['is_invalid']: continue
+    # Get valid categories for processing annotations
+    valid_category = get_valid_categories(data_full)
+    # Initialize dictionary to collect annotations per category (using supercategory as key)
+    annotations_by_category = {cat_name: [] for cat_name in valid_category.values()}
 
-        if i['file_name'] in list_of_files:
-            list_of_valid_img.update({i['id']: i})
-    print(f"LIST of IMAGES to USE: {len(list_of_valid_img)}")
-    
-    valid_category = get_valid_category(data_full)
-    ann_per_dict = {valid_category[category]: [] for category in valid_category}
-
-    for ann_id, ann_class in enumerate(data_full['annotations']):
-        print(f"Left: {ann_id}/{len(data_full['annotations'])}", end='\r')
+    # Process each annotation
+    for ann_idx, ann in enumerate(data_full.get('annotations', [])):
+        print(f"Processing annotation {ann_idx}/{len(data_full.get('annotations', []))}", end='\r')
         try:
-            if not ann_class['image_id'] in list_of_valid_img: continue
-            if not ann_class['category_id'] in valid_category: continue
-            #if ann_class['is_valid'] == False: continue #used if exist additional anotation flag is_valid which mean annotation was checked in some way 
-        except:
+            if ann.get('image_id') not in valid_images:
+                continue
+            if ann.get('category_id') not in valid_category:
+                continue
+        except Exception:
             continue
 
-        poly = [(
-            int(ann_class['segmentation'][0][point * 2]), 
-            int(ann_class['segmentation'][0][point * 2 + 1])) for point in range(int(len(ann_class['segmentation'][0])/2))]
-        ann_class['segmentation'] = poly
-        ann_class.update({'include_in_odm': list_of_valid_img[ann_class['image_id']]['fishial_extra']['include_in_odm'] })
-        ann_per_dict[valid_category[ann_class['category_id']]].append(ann_class)
+        # Convert segmentation into list of (x, y) tuples (assuming a single polygon per annotation)
+        seg = ann.get('segmentation', [])
+        if seg:
+            points = [(int(seg[0][i]), int(seg[0][i + 1])) for i in range(0, len(seg[0]), 2)]
+            ann['segmentation'] = points
+        else:
+            continue
 
+        # Add extra info from image metadata
+        fishial_extra = valid_images[ann.get('image_id')].get('fishial_extra', {})
+        ann['include_in_odm'] = fishial_extra.get('include_in_odm', False)
+        # Append annotation under its valid category
+        cat_name = valid_category.get(ann.get('category_id'))
+        if cat_name:
+            annotations_by_category[cat_name].append(ann)
 
-    for k in list(ann_per_dict):
-        if len(ann_per_dict[k]) < min_cnt_img:
-            del ann_per_dict[k]
-    print(f"TOTAL COUNT OF APPROVED IMAGES: {len(ann_per_dict)}")
-    labels_dict = {}
-    labels_dict.update({
-                label: label_id for label_id, label in enumerate(list(ann_per_dict))
-            })
-    print(f"LIST OF APPROVED IMAGES: {labels_dict}")
+    # Remove categories with fewer than min_cnt_img annotations
+    for cat in list(annotations_by_category.keys()):
+        if len(annotations_by_category[cat]) < min_cnt_img:
+            del annotations_by_category[cat]
+    print(f"\nTotal approved categories: {len(annotations_by_category)}")
 
-    data_compleated = [[],[],[]]
+    # Create label mapping from category name to an integer id
+    label_mapping = {label: idx for idx, label in enumerate(annotations_by_category.keys())}
+    print(f"Label mapping: {label_mapping}")
 
-    for label_name in ann_per_dict:
-        ann_per_dict[label_name] = sorted(ann_per_dict[label_name], key=lambda d: d['include_in_odm'], reverse=True) 
-        id_end_val = int(max_percent_eva_img * len(ann_per_dict[label_name])) if len(ann_per_dict[label_name]) > int(min_eval_img/max_percent_eva_img) else min_eval_img
-        id_end_train = len(ann_per_dict[label_name]) - id_end_val - 1 if len(ann_per_dict[label_name]) - id_end_val <= max_cnt_img_per_class else max_cnt_img_per_class
-        data_compleated[0].extend(ann_per_dict[label_name][:id_end_val])
-        data_compleated[1].extend(ann_per_dict[label_name][id_end_val:id_end_val + id_end_train])
-        data_compleated[2].extend(ann_per_dict[label_name][id_end_val + id_end_train:])
+    # Combine all annotations (currently only one split is used)
+    combined_annotations = []
+    for cat, anns in annotations_by_category.items():
+        # Sort annotations by 'include_in_odm' flag in descending order
+        sorted_anns = sorted(anns, key=lambda d: d.get('include_in_odm', False), reverse=True)
+        combined_annotations.extend(sorted_anns)
 
-    for data in data_compleated:
-        for k in data:
-            k.update({'id_internal': labels_dict[valid_category[k['category_id']]]})
-            k.update({'label': valid_category[k['category_id']]})
+    # Update annotations with internal id and label based on category
+    for ann in combined_annotations:
+        cat_super = valid_category.get(ann.get('category_id'))
+        ann['id_internal'] = label_mapping.get(cat_super)
+        ann['label'] = cat_super
 
-    samples = []
     records = []
-    for dataset in zip(data_compleated, ['val', 'train', 'rest']):
-        for k_id, ann_inst in enumerate(dataset[0]):
-            print(f"dataset: {dataset[1]} | {k_id}/{len(dataset[0])}", end='\r')
+    samples = []
+    # Process each annotation to create cropped image and annotate
+    for idx, ann_inst in enumerate(combined_annotations):
+        print(f"Creating sample {idx}/{len(combined_annotations)}", end='\r')
 
-            img = cv2.imread(os.path.join(PATH_FULL_IMAGES, list_of_valid_img[ann_inst['image_id']]['file_name']))
-            shape = img.shape
-            if shape[0] > 2400 or shape[1] > 2400: continue
+        img_path = os.path.join(path_full_images, valid_images[ann_inst.get('image_id')]['file_name'])
+        img = cv2.imread(img_path)
+        if img is None:
+            continue
+        height, width = img.shape[:2]
+        # Fix polygon to be within image boundaries
+        ann_inst['segmentation'] = fix_polygon(ann_inst['segmentation'], [width, height])
+        rect = cv2.boundingRect(np.array(ann_inst['segmentation']))
+        x, y, w, h = rect
+        # Skip small bounding boxes
+        if w < 80 or h < 80:
+            continue
 
-            ann_inst['segmentation'] = fix_poly(ann_inst['segmentation'], [shape[1], shape[0]])
-            rect = cv2.boundingRect(np.array(ann_inst['segmentation']))
-            x, y, w, h = rect
-            if w < 80 or h < 80: continue
+        # Crop image using bounding box
+        crop = img[y:y + h, x:x + w]
+        # Update segmentation coordinates relative to crop
+        ann_inst['segmentation'] = [(pt[0] - x, pt[1] - y) for pt in ann_inst['segmentation']]
 
-            mask = img[y:y + h, x:x + w]
-            ann_inst['segmentation'] = [(v[0] - x, v[1] - y) for v in ann_inst['segmentation']]
+        ann_id = str(ann_inst.get('id'))
+        path_to_save = os.path.join(folder_to_save_files, f"{ann_id}.png")
+        try:
+            cv2.imwrite(path_to_save, crop)
+        except Exception as e:
+            print(f"Error saving image {path_to_save}: {e}")
+            continue
 
-            ann_id = ann_inst['id']
+        # Normalize polygon points to relative coordinates
+        new_poly = [(pt[0] / w, pt[1] / h) for pt in ann_inst['segmentation']]
+        tag_odm = 'odm_true' if ann_inst.get('include_in_odm') else 'odm_false'
+        records.append(ann_inst)
 
-            path_to_save = os.path.join(folder_to_save_files, ann_id + ".png")
-            try:
-                cv2.imwrite(path_to_save, mask)
-            except:
-                continue
+        sample = fo.Sample(filepath=path_to_save, tags=[tag_odm])
+        sample["polyline"] = fo.Polyline(
+            label=ann_inst['label'],
+            points=[new_poly],
+            closed=True,
+            filled=False
+        )
+        sample["area"] = polygon_area([p[0] for p in new_poly], [p[1] for p in new_poly])
+        sample['width'] = w
+        sample['height'] = h
+        sample['drawn_fish_id'] = ann_inst.get('fishial_extra', {}).get('drawn_fish_id', None)
+        sample["annotation_id"] = ann_inst.get('id')
+        sample["image_id"] = str(ann_inst.get('image_id'))
+        samples.append(sample)
 
-            new_poly = [(z[0]/w, z[1]/h) for z in ann_inst['segmentation']]
+    # Save processed annotation records to JSON
+    annotation_save_path = os.path.join(dst_path, "annotation.json")
+    save_json(records, annotation_save_path)
+    print(f"\nAnnotations saved to {annotation_save_path}")
 
-            tag_odm = 'odm_true' if ann_inst['include_in_odm'] else 'odm_false'
-            records.append(ann_inst)
-            sample = fo.Sample(filepath=path_to_save, tags=[dataset[1], tag_odm])
-            sample["polyline"] = fo.Polyline(
-                                    label=ann_inst['label'],
-                                    points=[new_poly],
-                                    closed=True,
-                                    filled=False)
-
-            sample["area"] = PolyArea([i[0] for i in new_poly],[i[1] for i in new_poly])
-            sample['width'] = w
-            sample['height'] = h
-            sample['drawn_fish_id'] = ann_inst['fishial_extra']['drawn_fish_id']
-       
-            sample["annotation_id"] = ann_id
-            sample["image_id"] = str(ann_inst['image_id'])
-            samples.append(sample)
-    save_json(records, os.path.join(dst_path, "annotation.json"))
-
-
-    dataset = fo.Dataset(VOXEL_DATASET_NAME)
+    # Create and save FiftyOne dataset
+    dataset = fo.Dataset(voxel_dataset_name)
     dataset.add_samples(samples)
     dataset.persistent = True
     dataset.save()
+    print(f"FiftyOne dataset '{voxel_dataset_name}' created with {len(samples)} samples.")
+
+
+def main() -> None:
+    """
+    Main function to parse arguments and process annotations.
+    """
+    args = parse_arguments()
+    process_annotations(args)
+
 
 if __name__ == '__main__':
-    main(arg_parser().parse_args())
+    main()
