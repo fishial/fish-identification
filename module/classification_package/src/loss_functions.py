@@ -5,6 +5,35 @@ import torch.nn.functional as F
 from pytorch_metric_learning import losses, miners, trainers, samplers
 from pytorch_metric_learning.samplers import MPerClassSampler
 
+class CombinedLoss(nn.Module):
+    """
+    A weighted combination of a classification loss (CrossEntropy on ArcFace logits)
+    and a metric learning loss.
+    """
+    def __init__(self, arcface_weight=0.7, metric_weight=0.3):
+        super().__init__()
+        self.arcface_criterion = nn.CrossEntropyLoss()
+
+        # Using ThresholdConsistentMarginLoss for the metric learning component
+        self.metric_loss = losses.ThresholdConsistentMarginLoss()
+
+        self.miner = miners.BatchHardMiner()  # You can experiment with the miner later
+        self.arcface_weight = arcface_weight
+        self.metric_weight = metric_weight
+
+    def forward(self, embeddings, arcface_logits, labels):
+        # Classification loss
+        arcface_loss = self.arcface_criterion(arcface_logits, labels)
+
+        # Metric learning loss
+        hard_pairs = self.miner(embeddings, labels)
+        metric_loss = self.metric_loss(embeddings, labels, indices_tuple=hard_pairs)
+
+        # Combine the two losses
+        total_loss = self.arcface_weight * arcface_loss + self.metric_weight * metric_loss
+        return total_loss
+    
+    
 class MultiSimilarityLoss(nn.Module):
     def __init__(self):
         super(MultiSimilarityLoss, self).__init__()
