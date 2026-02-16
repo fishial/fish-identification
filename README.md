@@ -152,20 +152,11 @@ The following checkpoints are organized by task. TorchScript-ready artifacts are
 | MaskRCNN Fish Segmentation (Updated 15.11.2022) | Older Detectron2 checkpoint | [download](https://storage.googleapis.com/fishial-ml-resources/model_15_11_2022.pth) |
 | MaskRCNN Fish Segmentation (Updated 29.06.2022) | Legacy checkpoint | [download](https://storage.googleapis.com/fishial-ml-resources/models_29.06.2022/model_0259999.pth) |
 
-## ❓ Need help?
-
-- Open an issue in this repository if you hit a bug or need clarification.
-- For general questions, tag `@fishial` or use the Fishial.ai Slack/Discord channels linked on the main site.
-
 -----
-
-## 📊 Training Results
-
-For more detailed results, see the [Training README](https://www.google.com/search?q=train_scripts/README.md).
 
 ### Classification Model
 
-A JSON file containing the names of all fish classes recognized by the latest model can be found here: **[labels.json](https://www.google.com/search?q=labels.json)**.
+A JSON file containing the names of all fish classes recognized by the latest model can be found here: **[labels.json](labels_v10.json)**.
 
 -----
 
