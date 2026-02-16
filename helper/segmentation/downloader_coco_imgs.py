@@ -47,7 +47,7 @@ def save_json_file(data: Dict[str, Any], file_path: str) -> None:
     with open(file_path, 'w', encoding='utf-8') as f:
         json.dump(data, f, indent=4)
 
-def download_image(url_info: Tuple[str, str, int]) -> None:
+def download_image(url_info: Tuple[str, str, int]) -> Tuple[bool, str, Optional[str]]:
     """
     Download an image from the given URL and save it to the specified file path.
 
@@ -56,18 +56,21 @@ def download_image(url_info: Tuple[str, str, int]) -> None:
             - The image URL (str)
             - The target file path (str)
             - The image index (int)
+            
+    Returns:
+        Tuple[bool, str, Optional[str]]: (Success, URL, Error Message)
     """
     url, file_path, index = url_info
     try:
-        response = requests.get(url, allow_redirects=True)
+        response = requests.get(url, allow_redirects=True, timeout=30)
         response.raise_for_status()  # Raise an exception for HTTP errors
         # Ensure the directory exists
         os.makedirs(os.path.dirname(file_path), exist_ok=True)
         with open(file_path, 'wb') as f:
             f.write(response.content)
-        print(f"Downloaded image index: {index}", end='\r')
-    except requests.RequestException as e:
-        print(f"Failed to download {url}: {e}")
+        return True, url, None
+    except Exception as e:
+        return False, url, str(e)
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -100,11 +103,14 @@ def main():
     images_data_folder = os.path.join(image_folder, "data")
     os.makedirs(images_data_folder, exist_ok=True)
     
+    print(f"images_data_folder: {images_data_folder}")
     # Get list of already downloaded images
     downloaded_files = [
         f for f in os.listdir(images_data_folder)
         if os.path.isfile(os.path.join(images_data_folder, f))
     ]
+
+    print("Count of downloaded files: ", len(downloaded_files))
     
     # Calculate and print the count of files that differ from the expected images in the dataset
     all_image_filenames = {image['file_name'] for image in data.get('images', [])}
@@ -115,6 +121,8 @@ def main():
     urls_to_download: List[Tuple[str, str, int]] = []
     for i, image in enumerate(tqdm(data.get('images', []), desc="Processing images")):
         file_name = image.get('file_name')
+        if image['id'] == 12561:
+            print("found: ", image,file_name,file_name in downloaded_files)
         if file_name in downloaded_files:
             continue  # Skip images already downloaded
         target_file_path = os.path.join(images_data_folder, file_name)
@@ -126,9 +134,26 @@ def main():
     save_json_file({'list_of_imgs': urls_to_download}, 'data.json')
     
     with ThreadPoolExecutor(max_workers=30) as executor:
-        list(tqdm(executor.map(download_image, urls_to_download),
-                  total=len(urls_to_download),
-                  desc="Downloading images"))
+        results = list(tqdm(executor.map(download_image, urls_to_download),
+                      total=len(urls_to_download),
+                      desc="Downloading images"))
+
+    failed_downloads = [r for r in results if not r[0]]
+    successful_downloads = [r for r in results if r[0]]
+
+    print(f"\nDownload Summary:")
+    print(f"Total Successful: {len(successful_downloads)}")
+    print(f"Total Failed: {len(failed_downloads)}")
+
+    if failed_downloads:
+        print("\nFailed Downloads Details:")
+        failed_data = []
+        for _, url, error in failed_downloads:
+            print(f" - {url}: {error}")
+            failed_data.append({'url': url, 'error': error})
+        
+        save_json_file({'failed': failed_data}, 'failed_downloads.json')
+        print("Saved failed downloads to 'failed_downloads.json'")
     
 if __name__ == '__main__':
     main()

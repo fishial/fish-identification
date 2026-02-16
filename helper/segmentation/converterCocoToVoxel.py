@@ -101,14 +101,69 @@ class CocoToVoxelConverter:
                     self.categories[ann_inst['category_id']], drawn_fish_id, ann_inst['id'], poly
                 ])
             except KeyError:
-                logging.warning(f"Skipping annotation {ann_inst['id']} due to missing keys.")
+                continue
+                # logging.warning(f"Skipping annotation {ann_inst['id']} due to missing keys.")
+    
+    def validate_image_file(self, filepath):
+        """Validates that the file exists and is a valid image."""
+        # Check if file exists
+        if not os.path.exists(filepath):
+            logging.error(f"File does not exist: {filepath}")
+            return False
+        
+        # Check if it's a file (not a directory)
+        if not os.path.isfile(filepath):
+            logging.error(f"Path is not a file: {filepath}")
+            return False
+        
+        # Check file extension
+        valid_extensions = {'.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.tif', '.webp'}
+        _, ext = os.path.splitext(filepath.lower())
+        if ext not in valid_extensions:
+            logging.error(f"Invalid file extension '{ext}' for file: {filepath}")
+            return False
+        
+        # Check file size
+        file_size = os.path.getsize(filepath)
+        if file_size == 0:
+            logging.error(f"File is empty (0 bytes): {filepath}")
+            return False
+        
+        # Try to read the image with cv2 to verify it's valid
+        try:
+            img = cv2.imread(filepath)
+            if img is None:
+                logging.error(f"cv2.imread returned None for file: {filepath}")
+                return False
+        except Exception as e:
+            logging.error(f"Failed to read image with cv2: {filepath}, error: {e}")
+            return False
+        
+        return True
     
     def create_dataset(self):
         """Creates the FiftyOne dataset from the processed data using labels."""
         samples = []
-        for image_id, info in self.images_info.items():
+        skipped_files = []
+        
+        logging.info(f"Starting dataset creation with {len(self.images_info)} images")
+        
+        for idx, (image_id, info) in enumerate(self.images_info.items()):
             if not info['poly']:
+                logging.debug(f"Skipping image {info['file_name']} - no polygons")
                 continue
+            
+            filepath = info['file_name']
+            logging.info(f"Processing image {idx+1}/{len(self.images_info)}: {filepath}")
+            
+            # Validate the image file
+            if not self.validate_image_file(filepath):
+                skipped_files.append(filepath)
+                continue
+            
+            # Convert to absolute path if not already
+            abs_filepath = os.path.abspath(filepath)
+            logging.debug(f"Using absolute path: {abs_filepath}")
             
             dict_of_labels = {}
             for category, drawn_fish_id, ann_id, polylines in info['poly']:
@@ -124,20 +179,53 @@ class CocoToVoxelConverter:
                 else:
                     dict_of_labels.update({category['name']: [polyline]})
             
-            sample = fo.Sample(filepath=info['file_name'])
-            sample['image_id'] = image_id
-            sample['width'] = info['width']
-            sample['height'] = info['height']
-            
-            for label in dict_of_labels:
-                sample[label] = fo.Polylines(polylines=dict_of_labels[label])
-            
-            samples.append(sample)
+            try:
+                logging.debug(f"Creating FiftyOne sample for: {abs_filepath}")
+                sample = fo.Sample(filepath=abs_filepath)
+                
+                # Check if media_type is valid
+                if sample.media_type == 'unknown':
+                    logging.error(f"Sample has unknown media_type for: {abs_filepath}")
+                    skipped_files.append(filepath)
+                    continue
+                
+                logging.debug(f"Sample media_type: {sample.media_type}")
+                
+                sample['image_id'] = image_id
+                sample['width'] = info['width']
+                sample['height'] = info['height']
+                
+                for label in dict_of_labels:
+                    sample[label] = fo.Polylines(polylines=dict_of_labels[label])
+                
+                samples.append(sample)
+                logging.debug(f"Successfully created sample for: {abs_filepath}")
+            except Exception as e:
+                logging.error(f"Failed to create sample for {abs_filepath}: {type(e).__name__}: {e}")
+                skipped_files.append(filepath)
+                continue
         
+        logging.info(f"Created {len(samples)} valid samples")
+        if skipped_files:
+            logging.warning(f"Skipped {len(skipped_files)} files:")
+            for skipped in skipped_files[:10]:  # Show first 10
+                logging.warning(f"  - {skipped}")
+            if len(skipped_files) > 10:
+                logging.warning(f"  ... and {len(skipped_files) - 10} more")
+        
+        # Check if dataset already exists and delete it
+        if fo.dataset_exists(self.dataset_name):
+            logging.warning(f"Dataset '{self.dataset_name}' already exists. Deleting it...")
+            fo.delete_dataset(self.dataset_name)
+        
+        # Create dataset and add samples
+        logging.info(f"Creating FiftyOne dataset '{self.dataset_name}'")
         dataset = fo.Dataset(self.dataset_name)
+        
+        logging.info(f"Adding {len(samples)} samples to dataset...")
         dataset.add_samples(samples)
         dataset.persistent = True
-        logging.info("Dataset created successfully!")
+        logging.info(f"Dataset created successfully with {len(samples)} samples!")
 
     def run(self):
         """Executes the entire processing pipeline."""

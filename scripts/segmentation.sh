@@ -28,13 +28,12 @@ usage() {
 
 # Default values
 # Coco file json export path
-COCO_FILE="/home/fishial/Fishial/dataset/EXPORT_V_0_8_TEST/V.08_Fishial_Export_Jun_21_2024_05_45_Prod_Export_Test_Images_for_testing.json"
-
+COCO_FILE="/home/fishial/Fishial/dataset/EXPORT_V_0_9/Fishial_Export_Jan_07_2026_05_15_Prod_Export_Test_Images_for_testing.json"
 # directory where images are saved
 IMAGES_DIR="/home/fishial/Fishial/dataset/EXPORT_V_0_8_TEST/data"
 
 # Fiftyone dataset name
-DATASET_SEGMENT="segmentation_dataset_v0.81"
+DATASET_SEGMENT="segmentation_dataset_v0.10_TEST"
 
 # Directore for save segmentation model files
 SAVE_DIR_SEGMENTATION="/home/fishial/Fishial/TEST_PIPINE/segmentation_bash"
@@ -80,6 +79,6 @@ train_segmentation() {
 
 echo "Starting segmentation pipeline..."
 convert_coco_to_voxel
-split_fiftyone_segmentation
-train_segmentation
+# split_fiftyone_segmentation
+# train_segmentation
 echo "Segmentation pipeline finished."

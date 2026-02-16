@@ -1,28 +1,28 @@
 #!/bin/bash
 ################################################################################
-# 🐟 Advanced Object Detection Pipeline
+# 🐟 Advanced Segmentation Pipeline (YOLO-based)
 # 
-# This script executes optimized object detection tasks:
-# 1. Convert FiftyOne dataset to YOLO format for fish detection (auto-skip if exists)
-# 2. Train the object detection model with advanced optimization
+# This script executes optimized segmentation tasks:
+# 1. Convert FiftyOne dataset to YOLO segmentation format (auto-skip if exists)
+# 2. Train the segmentation model with advanced optimization
 #
 # Features:
 #   ✅ Simple, explicit configuration
 #   ✅ Resume training from checkpoint
-#   ✅ Optimized for detecting multiple fish
+#   ✅ Optimized for segmenting multiple fish
 #   ✅ Advanced augmentation settings
 #   ✅ Automatic dataset detection (no recreation if exists)
 #   ✅ GPU detection and configuration
 #
 # Usage:
-#   ./object_detection.sh [options]
+#   ./segmentation_yolo.sh [options]
 #
 # Options:
 #   -h           Show help
 #   -d <name>    Dataset name in FiftyOne
 #   -o <dir>     Output directory for YOLO dataset
 #   -n <num>     Number of classes (default: 1)
-#   -m <path>    Model path (default: yolo26n.pt)
+#   -m <path>    Model path (default: yolo26n-seg.pt)
 #   -c <path>    Resume from checkpoint (path to last.pt or best.pt)
 #   -p <proj>    Project directory for training output
 #   -r <name>    Run name for this training session
@@ -51,7 +51,7 @@ usage() {
   echo "  -d <name>       Dataset name in FiftyOne"
   echo "  -o <dir>        Output directory for YOLO dataset"
   echo "  -n <num>        Number of classes (default: 1)"
-  echo "  -m <path>       Model path (default: yolo26n.pt)"
+  echo "  -m <path>       Model path (default: yolo26n-seg.pt)"
   echo "  -c <path>       Resume from checkpoint (path to last.pt or best.pt)"
   echo "  -p <proj>       Project directory for training output"
   echo "  -r <name>       Run name for this training session"
@@ -65,13 +65,13 @@ usage() {
   echo -e "${CYAN}Examples:${NC}"
   echo ""
   echo "  ${BOLD}# New training${NC}"
-  echo "  $0 -d my_dataset -r fish_v1"
+  echo "  $0 -d my_dataset -r fish_seg_v1"
   echo ""
   echo "  ${BOLD}# Resume from checkpoint${NC}"
-  echo "  $0 -d my_dataset -c ./runs/fish_v1/weights/last.pt -r fish_v1_resumed"
+  echo "  $0 -d my_dataset -c ./runs/fish_seg_v1/weights/last.pt -r fish_seg_v1_resumed"
   echo ""
   echo "  ${BOLD}# Custom model and image size${NC}"
-  echo "  $0 -d my_dataset -m yolo26m.pt -i 1280 -e 500 -r fish_v2"
+  echo "  $0 -d my_dataset -m yolo26m-seg.pt -i 1280 -e 500 -r fish_seg_v2"
   echo ""
   echo "  ${BOLD}# Dry run to test configuration${NC}"
   echo "  $0 -d my_dataset -r test -t"
@@ -87,56 +87,58 @@ usage() {
 # ============== DEFAULT CONFIGURATION ==============
 
 # Dataset configuration
-FO_FISH_DETECTION_DATASET="segmentation_merged_v0.1_full"
+FO_FISH_SEGMENTATION_DATASET="segmentation_merged_v0.1_full"
 NUM_CLASSES=1
-COCO_FISH_DETECTION_OUTPUT_DIR="/home/fishial/Fishial/Experiments/v10/detection/"segmentation_merged_v0_1_full""
-# Fishial/Experiments/v10/detection/fish_detection_20260205_211724/weights/best.pt
+YOLO_FISH_SEGMENTATION_OUTPUT_DIR="/home/fishial/Fishial/Experiments/v10/segmentation/segmentation_merged_v0_1_full"
+
 # Model configuration
-MODEL="/home/fishial/Fishial/saved_models/yolo26m.pt"
-# RESUME_CHECKPOINT="/home/fishial/Fishial/Experiments/v10/detection/fish_detection_20260204_115831/weights/best.pt"  # Path to checkpoint for resume training
+MODEL="/home/fishial/Fishial/Experiments/v10/segmentation/fish_segmentation_20260207_162332/weights/best.pt"
+RESUME_CHECKPOINT=""  # Path to checkpoint for resume training
 
 # Project configuration
-PROJECT="/home/fishial/Fishial/Experiments/v10/detection"
-RUN_NAME="fish_detection_$(date +%Y%m%d_%H%M%S)"
+PROJECT="/home/fishial/Fishial/Experiments/v10/segmentation"
+RUN_NAME="fish_segmentation_$(date +%Y%m%d_%H%M%S)"
 
 # GPU configuration
 GPU_DEVICE="0"
 
 # Training parameters
 EPOCHS=300
-BATCH=16  # Auto batch size
+BATCH=-1  # Auto batch size
 IMGSZ=640
-PATIENCE=50
+PATIENCE=100
 WORKERS=8
 
-# Detection parameters (optimized for multiple fish)
-CONF=0.3
+# Detection/Segmentation parameters (optimized for multiple fish)
+CONF=0.15
 IOU=0.45
 MAX_DET=500
 
 # Augmentation parameters
-AUGMENT_LEVEL="none"
+AUGMENT_LEVEL="heavy"
 MOSAIC=1.0
 MIXUP=0.15
 COPY_PASTE=0.3
 
-# Optimization parameters (ULTRA STABLE for NaN prevention)
+# Optimization parameters
 OPTIMIZER="AdamW"
-LR0=0.001  # Reduced even more (was 0.0001) 
-LR_FINAL=0.000005  # Very conservative final LR
-WARMUP_EPOCHS=10  # Extended warmup for maximum stability
-WEIGHT_DECAY=0.001  # Increased regularization
-AMP=false  # CRITICAL: KEEP DISABLED until stable
-MULTI_SCALE=false  # KEEP DISABLED
+LR0=0.001
+AMP=true
+MULTI_SCALE=false  # Disabled to avoid interpolation errors
 SINGLE_CLS=true
-GRADIENT_CLIP=5.0  # More aggressive clipping (was 10.0)
-CLOSE_MOSAIC=50  # Disable mosaic in last 50 epochs
+
+# Segmentation-specific settings
+OVERLAP_MASK=true
+MASK_RATIO=4
+RETINA_MASKS=true
+
+# Polyline field in FiftyOne dataset
+POLYLINE_FIELD="General body shape"
 
 # Flags
 DRY_RUN=false
 VERBOSE=false
 QUIET=false
-
 
 
 # ============== PARSE ARGUMENTS ==============
@@ -146,10 +148,10 @@ while getopts "hd:o:n:m:c:p:r:e:i:g:vqt" opt; do
       usage
       ;;
     d)
-      FO_FISH_DETECTION_DATASET="$OPTARG"
+      FO_FISH_SEGMENTATION_DATASET="$OPTARG"
       ;;
     o)
-      COCO_FISH_DETECTION_OUTPUT_DIR="$OPTARG"
+      YOLO_FISH_SEGMENTATION_OUTPUT_DIR="$OPTARG"
       ;;
     n)
       NUM_CLASSES="$OPTARG"
@@ -192,14 +194,14 @@ done
 shift $((OPTIND-1))
 
 # Set data.yaml path based on output directory
-DATA="$COCO_FISH_DETECTION_OUTPUT_DIR/data.yaml"
+DATA="$YOLO_FISH_SEGMENTATION_OUTPUT_DIR/data.yaml"
 
 # ============== HELPER FUNCTIONS ==============
 
 print_header() {
     echo -e "${CYAN}${BOLD}"
     echo "================================================================================"
-    echo "  🐟 ADVANCED FISH DETECTION PIPELINE"
+    echo "  🐟 ADVANCED FISH SEGMENTATION PIPELINE (YOLO)"
     echo "================================================================================"
     echo -e "${NC}"
 }
@@ -250,7 +252,7 @@ validate_model() {
         return 1
     fi
     
-    # If it's a standard model name (like yolo26n.pt), check in saved_models directory
+    # If it's a standard model name (like yolo26n-seg.pt), check in saved_models directory
     if [[ ! "$model" =~ ^/ ]]; then
         local model_dir="/home/fishial/Fishial/saved_models"
         if [ -f "$model_dir/$model" ]; then
@@ -279,14 +281,15 @@ save_config() {
     fi
     
     cat > "$config_file" <<EOF
-# Training Configuration - $(date)
-# Generated by object_detection.sh
+# Segmentation Training Configuration - $(date)
+# Generated by segmentation_yolo.sh
 
 [Dataset]
-FiftyOne_Dataset = $FO_FISH_DETECTION_DATASET
-YOLO_Output_Dir = $COCO_FISH_DETECTION_OUTPUT_DIR
+FiftyOne_Dataset = $FO_FISH_SEGMENTATION_DATASET
+YOLO_Output_Dir = $YOLO_FISH_SEGMENTATION_OUTPUT_DIR
 Data_YAML = $DATA
 Num_Classes = $NUM_CLASSES
+Polyline_Field = $POLYLINE_FIELD
 
 [Model]
 Model = $MODEL
@@ -302,10 +305,13 @@ Patience = $PATIENCE
 Workers = $WORKERS
 GPU_Device = $GPU_DEVICE
 
-[Detection]
+[Segmentation]
 Confidence = $CONF
 IoU_Threshold = $IOU
 Max_Detections = $MAX_DET
+Overlap_Mask = $OVERLAP_MASK
+Mask_Ratio = $MASK_RATIO
+Retina_Masks = $RETINA_MASKS
 
 [Augmentation]
 Level = $AUGMENT_LEVEL
@@ -317,10 +323,6 @@ Multi_Scale = $MULTI_SCALE
 [Optimization]
 Optimizer = $OPTIMIZER
 Learning_Rate = $LR0
-Learning_Rate_Final = ${LR_FINAL:-auto}
-Warmup_Epochs = ${WARMUP_EPOCHS:-3}
-Weight_Decay = ${WEIGHT_DECAY:-0.0005}
-Gradient_Clip = ${GRADIENT_CLIP:-disabled}
 AMP = $AMP
 Single_Class = $SINGLE_CLS
 EOF
@@ -354,7 +356,7 @@ check_dataset_exists() {
     fi
     
     # Check for both possible directory structures
-    # Structure 1: train/images and train/labels (used by fiftyone_to_yolo.py)
+    # Structure 1: train/images and train/labels (used by fiftyone_to_yolo_segmentation.py)
     # Structure 2: images/train and labels/train (alternative YOLO format)
     local train_images_dir=""
     local train_labels_dir=""
@@ -405,17 +407,20 @@ check_dataset_exists() {
     return 0
 }
 
-fish_detection_to_yolo() {
-    print_section "📊 Converting FiftyOne dataset to YOLO format..."
-    echo "Dataset: $FO_FISH_DETECTION_DATASET"
-    echo "Output: $COCO_FISH_DETECTION_OUTPUT_DIR"
+fish_segmentation_to_yolo() {
+    print_section "📊 Converting FiftyOne dataset to YOLO segmentation format..."
+    echo "Dataset: $FO_FISH_SEGMENTATION_DATASET"
+    echo "Output: $YOLO_FISH_SEGMENTATION_OUTPUT_DIR"
+    echo "Polyline field: $POLYLINE_FIELD"
     echo ""
     
-    python ../module/fish_detection/fiftyone_to_yolo.py \
-        --dataset "$FO_FISH_DETECTION_DATASET" \
-        --output_dir "$COCO_FISH_DETECTION_OUTPUT_DIR" \
+    python ../module/segmentation_mask/fiftyone_to_yolo_segmentation.py \
+        --dataset "$FO_FISH_SEGMENTATION_DATASET" \
+        --output_dir "$YOLO_FISH_SEGMENTATION_OUTPUT_DIR" \
         --split_train_val \
-        --num_classes "$NUM_CLASSES"
+        --num_classes "$NUM_CLASSES" \
+        --polyline_field "$POLYLINE_FIELD" \
+        --verbose
     
     if [ $? -eq 0 ]; then
         echo -e "${GREEN}✓ Dataset conversion completed${NC}"
@@ -428,7 +433,7 @@ fish_detection_to_yolo() {
 
 print_training_config() {
     echo -e "${BLUE}${BOLD}═══════════════════════════════════════════════════════════════════════${NC}"
-    echo -e "${BLUE}${BOLD}  Training Configuration${NC}"
+    echo -e "${BLUE}${BOLD}  Segmentation Training Configuration${NC}"
     echo -e "${BLUE}${BOLD}═══════════════════════════════════════════════════════════════════════${NC}"
     echo ""
     
@@ -439,10 +444,11 @@ print_training_config() {
     fi
     
     echo -e "${CYAN}Dataset:${NC}"
-    echo "  FiftyOne Dataset: $FO_FISH_DETECTION_DATASET"
-    echo "  YOLO Output: $COCO_FISH_DETECTION_OUTPUT_DIR"
+    echo "  FiftyOne Dataset: $FO_FISH_SEGMENTATION_DATASET"
+    echo "  YOLO Output: $YOLO_FISH_SEGMENTATION_OUTPUT_DIR"
     echo "  Data YAML: $DATA"
     echo "  Classes: $NUM_CLASSES"
+    echo "  Polyline Field: $POLYLINE_FIELD"
     echo ""
     
     echo -e "${CYAN}Model & Training:${NC}"
@@ -465,10 +471,13 @@ print_training_config() {
     echo ""
     
     if [ "$VERBOSE" = true ]; then
-        echo -e "${CYAN}Detection Settings:${NC}"
+        echo -e "${CYAN}Segmentation Settings:${NC}"
         echo "  Confidence: $CONF"
         echo "  IoU Threshold: $IOU"
         echo "  Max Detections: $MAX_DET"
+        echo "  Overlap Mask: $OVERLAP_MASK"
+        echo "  Mask Ratio: $MASK_RATIO"
+        echo "  Retina Masks: $RETINA_MASKS"
         echo ""
         
         echo -e "${CYAN}Augmentation:${NC}"
@@ -481,10 +490,7 @@ print_training_config() {
         
         echo -e "${CYAN}Optimization:${NC}"
         echo "  Optimizer: $OPTIMIZER"
-        echo "  Learning Rate: $LR0 → ${LR_FINAL:-auto}"
-        echo "  Warmup Epochs: ${WARMUP_EPOCHS:-3}"
-        echo "  Weight Decay: ${WEIGHT_DECAY:-0.0005}"
-        echo "  Gradient Clip: ${GRADIENT_CLIP:-disabled}"
+        echo "  Learning Rate: $LR0"
         echo "  AMP: $AMP"
         echo "  Single Class: $SINGLE_CLS"
         echo ""
@@ -494,8 +500,8 @@ print_training_config() {
     echo ""
 }
 
-train_object_detection() {
-    print_section "🚀 Training object detection model..."
+train_segmentation() {
+    print_section "🚀 Training segmentation model..."
     
     # Save configuration before training
     local config_file="$PROJECT/${RUN_NAME}_config.txt"
@@ -504,7 +510,7 @@ train_object_detection() {
     echo ""
     
     # Build command
-    CMD="python ../train_scripts/object_detection/train.py"
+    CMD="python ../train_scripts/segmentation/train_yolo.py"
     
     # Model or Resume
     if [ -n "$RESUME_CHECKPOINT" ]; then
@@ -525,10 +531,11 @@ train_object_detection() {
     CMD="$CMD --device $GPU_DEVICE"
     CMD="$CMD --workers $WORKERS"
     
-    # Detection settings
+    # Segmentation settings
     CMD="$CMD --conf $CONF"
     CMD="$CMD --iou $IOU"
     CMD="$CMD --max_det $MAX_DET"
+    CMD="$CMD --mask_ratio $MASK_RATIO"
     
     # Augmentation
     CMD="$CMD --augment_level $AUGMENT_LEVEL"
@@ -540,22 +547,9 @@ train_object_detection() {
     CMD="$CMD --optimizer $OPTIMIZER"
     CMD="$CMD --lr0 $LR0"
     
-    # Additional optimization parameters (if defined)
-    if [ -n "$LR_FINAL" ]; then
-        CMD="$CMD --lrf $LR_FINAL"
-    fi
-    if [ -n "$WARMUP_EPOCHS" ]; then
-        CMD="$CMD --warmup_epochs $WARMUP_EPOCHS"
-    fi
-    if [ -n "$WEIGHT_DECAY" ]; then
-        CMD="$CMD --weight_decay $WEIGHT_DECAY"
-    fi
-    
     # Flags
     if [ "$AMP" = true ]; then
         CMD="$CMD --amp"
-    else
-        CMD="$CMD --no-amp"
     fi
     
     if [ "$MULTI_SCALE" = true ]; then
@@ -566,8 +560,12 @@ train_object_detection() {
         CMD="$CMD --single_cls"
     fi
     
-    if [ -n "$CLOSE_MOSAIC" ]; then
-        CMD="$CMD --close_mosaic $CLOSE_MOSAIC"
+    if [ "$OVERLAP_MASK" = true ]; then
+        CMD="$CMD --overlap_mask"
+    fi
+    
+    if [ "$RETINA_MASKS" = true ]; then
+        CMD="$CMD --retina_masks"
     fi
     
     if [ "$DRY_RUN" = true ]; then
@@ -608,9 +606,10 @@ train_object_detection() {
         echo -e "${CYAN}Configuration:${NC} $config_file"
         echo ""
         echo -e "${YELLOW}Next steps:${NC}"
-        echo "  1. Validate: python ../train_scripts/object_detection/validate_model.py --model $PROJECT/$RUN_NAME/weights/best.pt --data $DATA"
-        echo "  2. Predict:  python ../train_scripts/object_detection/predict_optimized.py --model $PROJECT/$RUN_NAME/weights/best.pt --source <image>"
-        echo "  3. Resume:   ./object_detection.sh -c $PROJECT/$RUN_NAME/weights/last.pt -r ${RUN_NAME}_resumed"
+        echo "  1. Validate: python -m ultralytics val model=$PROJECT/$RUN_NAME/weights/best.pt data=$DATA task=segment"
+        echo "  2. Predict:  python -m ultralytics predict model=$PROJECT/$RUN_NAME/weights/best.pt source=<image> task=segment"
+        echo "  3. Export:   python -m ultralytics export model=$PROJECT/$RUN_NAME/weights/best.pt format=onnx"
+        echo "  4. Resume:   ./segmentation_yolo.sh -c $PROJECT/$RUN_NAME/weights/last.pt -r ${RUN_NAME}_resumed"
         echo ""
     else
         echo ""
@@ -674,8 +673,8 @@ echo ""
 print_section "🔍 Checking for existing dataset..."
 echo ""
 
-if check_dataset_exists "$COCO_FISH_DETECTION_OUTPUT_DIR"; then
-    echo -e "${GREEN}✓ YOLO dataset already exists at: $COCO_FISH_DETECTION_OUTPUT_DIR${NC}"
+if check_dataset_exists "$YOLO_FISH_SEGMENTATION_OUTPUT_DIR"; then
+    echo -e "${GREEN}✓ YOLO dataset already exists at: $YOLO_FISH_SEGMENTATION_OUTPUT_DIR${NC}"
     echo -e "${YELLOW}⏭  Skipping dataset conversion${NC}"
     echo ""
 else
@@ -683,11 +682,11 @@ else
         echo -e "${YELLOW}Dataset not found or incomplete, will create new dataset${NC}"
         echo ""
     fi
-    fish_detection_to_yolo
+    fish_segmentation_to_yolo
 fi
 
-train_object_detection
+train_segmentation
 
 echo ""
-echo -e "${GREEN}${BOLD}🎉 Object detection pipeline finished!${NC}"
+echo -e "${GREEN}${BOLD}🎉 Segmentation pipeline finished!${NC}"
 echo ""

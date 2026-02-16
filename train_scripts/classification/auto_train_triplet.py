@@ -7,7 +7,8 @@ from datetime import datetime
 
 import torchvision.models as models
 from torchvision import transforms  # Added missing import
-from apex import amp
+# from apex import amp
+
 from PIL import Image
 from torch import nn
 from torch.utils.data import DataLoader
@@ -237,8 +238,8 @@ def train_model(args):
                                      warmup_steps=args.warmup_steps,
                                      t_total=args.epoch * len(train_loader))
 
-    model, optimizer = amp.initialize(model, optimizer, opt_level=args.opt_level)
-    amp._amp_state.loss_scalers[0]._loss_scale = 2 ** 20
+    # model, optimizer = amp.initialize(model, optimizer, opt_level=args.opt_level)
+    # amp._amp_state.loss_scalers[0]._loss_scale = 2 ** 20
 
     # Start training
     train(scheduler, args.epoch, optimizer, model, train_loader, val_dataset,

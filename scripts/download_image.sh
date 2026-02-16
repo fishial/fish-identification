@@ -3,8 +3,8 @@ set -euo pipefail
 #RUN: chmod +x ./download_image.sh
 
 ZIP_FILE_PATH="V0.4_export.zip"
-DST_COCOFILES_PATH="/home/fishial/Fishial/dataset/EXPORT_V_0_8_TEST/V.08_Fishial_Export_Jun_21_2024_05_45_Prod_Export_Test_Images_for_testing.json"
-DST_IMAGES_FOLDERNAME="/home/fishial/Fishial/dataset/EXPORT_V_0_8_TEST/image_v2"
+DST_COCOFILES_PATH="testing.json"
+DST_IMAGES_FOLDERNAME="images_folder"
 
 # mkdir -p $DST_COCOFILES_PATH
 

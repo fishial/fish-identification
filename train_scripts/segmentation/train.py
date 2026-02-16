@@ -39,7 +39,7 @@ def get_args():
     parser = ArgumentParser()
 
     # Training arguments
-    parser.add_argument("--epochs", type=int, default=5)
+    parser.add_argument("--epochs", type=int, default=100)
     parser.add_argument("--image_size", type=int, default=416)
     parser.add_argument("--debug", type=float, default=None)
     parser.add_argument("--ckpt", type=str, default=None)

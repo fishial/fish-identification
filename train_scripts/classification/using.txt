@@ -1,0 +1,534 @@
+python train_scripts/classification/compare_results.py \
+  /abs/path/runA/eval_20260112_120000 \
+  /abs/path/runB/eval_20260112_121000 \
+  --sort_by accuracy_top5 \
+  --csv_out /abs/path/compare.csv
+
+  python train_scripts/classification/posttrain_eval.py \
+  --dataset_name "classification_v0.10_train" \
+  --checkpoint "/home/fishial/Fishial/Experiments/v10/convnext_small.in12k_ft_in1k_20260116_150707/checkpoints/model-epoch=97-val/accuracy_epoch=0.8522.ckpt" \
+  --output_dir "/home/fishial/Fishial/Experiments/v09/classification/experiment_v16_beitv2_base" \
+  --backbone_model_name "beitv2_base_patch16_224.in1k_ft_in22k_in1k" \
+  --embedding_dim 512 \
+  --arcface_s 64 \
+  --arcface_m 0.5 \
+  --image_size 224 \
+  --batch_size 64
+
+  --resume_from_checkpoint "/home/fishial/Fishial/Experiments/v10/convnext_small.in12k_ft_in1k_20260116_150707/checkpoints/model-epoch=97-val/accuracy_epoch=0.8522.ckpt" \
+
+
+  python train_scripts/classification/lightning_train.py \
+  --dataset_name classification_v0.10_validation \
+  --output_dir /home/fishial/Fishial/Experiments/v10 \
+  --backbone_model_name convnext_small.in12k_ft_in1k_384 \
+  --exclude_classes "unset,Thunnus obesus" \
+  --load_weights_from_checkpoint /home/fishial/Fishial/Experiments/v10/convnext_small_20260112_144506/checkpoints/model-epoch=99-val/accuracy_epoch=0.8976.ckpt \
+  --image_size 384 \
+  --classes_per_batch 32 \
+  --samples_per_class 4 \
+  --accumulate_grad_batches 1 \
+  --learning_rate 1e-4 \
+  --weight_decay 0.12 \
+  --embedding_dropout_rate 0.2 \
+  --attention_loss_lambda 0.02 \
+  --freeze_backbone_epochs 0 \
+  --attention_warmup_epochs 0 \
+  --max_epochs 1000 \
+  --embedding_dim 512 \
+  --label_smoothing 0.1 \
+  --metric_weight 0.1
+
+  maxvit_base_tf_384.in21k_ft_in1k #76 - 87.92
+  convnext_small.in12k_ft_in1k # 85.174
+  beitv2_base_patch16_224.in1k_ft_in22k_in1k
+
+
+  
+
+  python /home/fishial/Fishial/FishialGithubRepo/fish-identification/train_scripts/classification/posttrain_export_predictions_csv.py \
+  --dataset_name "classification_v0.10_train" \
+  --checkpoint /home/fishial/Fishial/Experiments/v10/beitv2_base_patch16_224.in1k_ft_in22k_in1k_20260127_073527/checkpoints/model-epoch=58-val/accuracy_epoch=0.9498.ckpt \
+  --output_dir /home/fishial/Fishial/Experiments/v10/beitv2_base_patch16_224.in1k_ft_in22k_in1k_20260127_073527
+  --label_field polyline \
+  --train_tag val \
+  --max_samples 100 \
+  --topk 5
+
+
+python train_scripts/classification/lightning_train.py \
+  --dataset_name classification_v0.10_validation \
+  --output_dir /home/fishial/Fishial/Experiments/v10 \
+  --backbone_model_name convnext_small.in12k_ft_in1k_384 \
+  --exclude_classes "unset,Thunnus obesus" \
+  --load_weights_from_checkpoint /home/fishial/Fishial/Experiments/v10/convnext_small.in12k_ft_in1k_384_20260123_124447/checkpoints/epoch=10-step=6721.ckpt \
+  --image_size 384 \
+  --classes_per_batch 24 \
+  --samples_per_class 2 \
+  --accumulate_grad_batches 1 \
+  --learning_rate 1e-4 \
+  --weight_decay 0.12 \
+  --embedding_dropout_rate 0.2 \
+  --attention_loss_lambda 0.02 \
+  --freeze_backbone_epochs 0 \
+  --attention_warmup_epochs 0 \
+  --max_epochs 1000 \
+  --embedding_dim 512 \
+  --label_smoothing 0.1 \
+  --metric_weight 0.1 \
+  --arcface_weight 0.8 \
+  --loss_type combined_v2 \
+  --metric_loss_type multi_similarity \
+  --miner_type multi_similarity \
+  --focal_weight 0.1 \
+  --focal_gamma 2.0 \
+  --augmentation_preset basic \
+  --use_mixup false \
+  --mixup_alpha 0.4 \
+  --mixup_prob 0.5 \
+  --pooling_type attention
+
+  python train_scripts/classification/lightning_train.py \
+  --dataset_name classification_v0.10_train \
+  --output_dir /home/fishial/Fishial/Experiments/v10 \
+  --backbone_model_name convnext_small.in12k_ft_in1k_384 \
+  --exclude_classes "unset,Thunnus obesus" \
+  --load_weights_from_checkpoint /home/fishial/Fishial/Experiments/v10/convnext_small.in12k_ft_in1k_384_20260124_085932/checkpoints/epoch=157-step=42976.ckpt \
+  --image_size 384 \
+  --classes_per_batch 12 \
+  --samples_per_class 4 \
+  --accumulate_grad_batches 6 \
+  --learning_rate 1e-4 \
+  --weight_decay 0.12 \
+  --embedding_dropout_rate 0.2 \
+  --attention_loss_lambda 0.02 \
+  --freeze_backbone_epochs 5 \
+  --attention_warmup_epochs 5 \
+  --max_epochs 1000 \
+  --embedding_dim 512 \
+  --label_smoothing 0.1 \
+  --metric_weight 0.1 \
+  --arcface_weight 0.8 \
+  --augmentation_preset strong \
+  --loss_type combined_v2 \
+  --metric_loss_type multi_similarity \
+  --miner_type multi_similarity \
+  --use_mixup false \
+  --mixup_alpha 0.4 \
+  --mixup_prob 0.5 \
+  --pooling_type attention \
+  --train_tag train \
+  --val_tag val
+
+
+  python train_scripts/classification/lightning_train.py \
+  --dataset_name classification_v0.10_train \
+  --output_dir /home/fishial/Fishial/Experiments/v10 \
+  --backbone_model_name convnext_small.in12k_ft_in1k_384 \
+  --exclude_classes "unset,Thunnus obesus" \
+  --load_weights_from_checkpoint /home/fishial/Fishial/Experiments/v10/convnext_small.in12k_ft_in1k_384_20260125_073128/checkpoints/model-epoch=93-val/accuracy_epoch=0.8727.ckpt \
+  --image_size 384 \
+  --classes_per_batch 16 \
+  --samples_per_class 4 \
+  --accumulate_grad_batches 4 \
+  --learning_rate 5e-5 \
+  --weight_decay 0.05 \
+  --embedding_dropout_rate 0.15 \
+  --attention_loss_lambda 0.01 \
+  --freeze_backbone_epochs 0 \
+  --attention_warmup_epochs 0 \
+  --max_epochs 200 \
+  --embedding_dim 512 \
+  --label_smoothing 0.05 \
+  --metric_weight 0.1 \
+  --arcface_weight 0.9 \
+  --augmentation_preset standard \
+  --loss_type combined_v2 \
+  --metric_loss_type multi_similarity \
+  --miner_type multi_similarity \
+  --use_mixup false \
+  --pooling_type attention \
+  --train_tag train \
+  --val_tag val
+
+
+
+  step 2 
+python train_scripts/classification/lightning_train.py \
+  --dataset_name classification_v0.10_validation \
+  --output_dir /home/fishial/Fishial/Experiments/v10 \
+  --backbone_model_name beitv2_base_patch16_224.in1k_ft_in22k_in1k \
+  --exclude_classes "unset,Thunnus obesus" \
+  --train_tag train \
+  --val_tag none \
+  --load_weights_from_checkpoint /home/fishial/Fishial/Experiments/v09/classification/experiment_v16_beitv2_base/checkpoints/model-epoch=94-val_arc_acc=0.93656.ckpt \
+  --image_size 224 \
+  --classes_per_batch 24 \
+  --samples_per_class 4 \
+  --accumulate_grad_batches 1 \
+  --learning_rate 1e-4 \
+  --weight_decay 0.12 \
+  --embedding_dropout_rate 0.2 \
+  --attention_loss_lambda 0.02 \
+  --freeze_backbone_epochs 0 \
+  --attention_warmup_epochs 0 \
+  --max_epochs 1000 \
+  --embedding_dim 512 \
+  --label_smoothing 0.1 \
+  --metric_weight 0.1 \
+  --arcface_weight 0.8 \
+  --loss_type combined_v2 \
+  --metric_loss_type multi_similarity \
+  --miner_type multi_similarity \
+  --focal_weight 0.1 \
+  --focal_gamma 2.0 \
+  --augmentation_preset strong \
+  --use_mixup true \
+  --mixup_alpha 0.4 \
+  --mixup_prob 0.5 \
+  --pooling_type attention
+
+  python train_scripts/classification/lightning_train.py \
+  --dataset_name classification_v0.10_train \
+  --output_dir /home/fishial/Fishial/Experiments/v10 \
+  --backbone_model_name beitv2_base_patch16_224.in1k_ft_in22k_in1k \
+  --exclude_classes "unset,Thunnus obesus" \
+  --load_weights_from_checkpoint /home/fishial/Fishial/Experiments/v10/beitv2_base_patch16_224.in1k_ft_in22k_in1k_20260126_093428/checkpoints/model-epoch=27-val/accuracy_epoch=0.9352.ckpt \
+  --image_size 224 \
+  --classes_per_batch 24 \
+  --samples_per_class 4 \
+  --accumulate_grad_batches 4 \
+  --learning_rate 2e-5 \
+  --weight_decay 0.08 \
+  --embedding_dropout_rate 0.15 \
+  --attention_loss_lambda 0.01 \
+  --freeze_backbone_epochs 0 \
+  --attention_warmup_epochs 0 \
+  --max_epochs 200 \
+  --embedding_dim 512 \
+  --label_smoothing 0.05 \
+  --metric_weight 0.1 \
+  --arcface_weight 0.9 \
+  --augmentation_preset strong \
+  --loss_type combined_v2 \
+  --metric_loss_type multi_similarity \
+  --miner_type multi_similarity \
+  --use_mixup false \
+  --pooling_type attention \
+  --train_tag train \
+  --val_tag val
+
+
+step 3 (medium augmentation - balanced between standard and strong)
+python train_scripts/classification/lightning_train.py \
+  --dataset_name classification_v0.10_train \
+  --output_dir /home/fishial/Fishial/Experiments/v10 \
+  --backbone_model_name beitv2_base_patch16_224.in1k_ft_in22k_in1k \
+  --exclude_classes "unset,Thunnus obesus" \
+  --load_weights_from_checkpoint /home/fishial/Fishial/Experiments/v10/beitv2_base_patch16_224.in1k_ft_in22k_in1k_20260126_111711/checkpoints/model-epoch=17-val/accuracy_epoch=0.9433.ckpt \
+  --image_size 224 \
+  --classes_per_batch 24 \
+  --samples_per_class 4 \
+  --accumulate_grad_batches 4 \
+  --learning_rate 2e-5 \
+  --weight_decay 0.06 \
+  --embedding_dropout_rate 0.15 \
+  --attention_loss_lambda 0.01 \
+  --freeze_backbone_epochs 0 \
+  --attention_warmup_epochs 0 \
+  --max_epochs 200 \
+  --embedding_dim 512 \
+  --label_smoothing 0.05 \
+  --metric_weight 0.1 \
+  --arcface_weight 0.9 \
+  --augmentation_preset medium \
+  --loss_type combined_v2 \
+  --metric_loss_type multi_similarity \
+  --miner_type multi_similarity \
+  --use_mixup false \
+  --pooling_type attention \
+  --train_tag train \
+  --val_tag val
+
+  step 4 (medium augmentation - balanced between standard and strong)
+python train_scripts/classification/lightning_train.py \
+  --dataset_name classification_v0.10_train \
+  --output_dir /home/fishial/Fishial/Experiments/v10 \
+  --backbone_model_name beitv2_base_patch16_224.in1k_ft_in22k_in1k \
+  --exclude_classes "unset,Thunnus obesus" \
+  --load_weights_from_checkpoint /home/fishial/Fishial/Experiments/v10/beitv2_base_patch16_224.in1k_ft_in22k_in1k_20260126_121856/checkpoints/model-epoch=03-val/accuracy_epoch=0.9457.ckpt \
+  --image_size 224 \
+  --classes_per_batch 32 \
+  --samples_per_class 5 \
+  --accumulate_grad_batches 4 \
+  --learning_rate 1e-5 \
+  --weight_decay 0.06 \
+  --embedding_dropout_rate 0.2 \
+  --attention_loss_lambda 0.01 \
+  --freeze_backbone_epochs 0 \
+  --attention_warmup_epochs 0 \
+  --max_epochs 200 \
+  --embedding_dim 512 \
+  --label_smoothing 0.05 \
+  --metric_weight 0.1 \
+  --arcface_weight 0.9 \
+  --augmentation_preset medium \
+  --loss_type combined_v2 \
+  --metric_loss_type multi_similarity \
+  --miner_type multi_similarity \
+  --use_mixup false \
+  --pooling_type attention \
+  --train_tag train \
+  --val_tag val \
+  --visualize_attention_map false
+
+  step 5 (medium augmentation - balanced between standard and strong)
+python train_scripts/classification/lightning_train.py \
+  --dataset_name classification_v0.10_train \
+  --output_dir /home/fishial/Fishial/Experiments/v10 \
+  --backbone_model_name beitv2_base_patch16_224.in1k_ft_in22k_in1k \
+  --exclude_classes "unset,Thunnus obesus" \
+  --load_weights_from_checkpoint /home/fishial/Fishial/Experiments/v10/beitv2_base_patch16_224.in1k_ft_in22k_in1k_20260126_124736/checkpoints/model-epoch=08-val/accuracy_epoch=0.9470.ckpt \
+  --image_size 224 \
+  --classes_per_batch 32 \
+  --samples_per_class 8 \
+  --accumulate_grad_batches 4 \
+  --learning_rate 1e-5 \
+  --max_epochs 100 \
+  --use_swa true \
+  --swa_lrs 1e-6 \
+  --swa_epoch_start 0.75 \
+  --use_cyclic_lr true \
+  --cyclic_mode warm_restarts \
+  --cyclic_t0 10 \
+  --use_mixup true \
+  --mixup_alpha 0.1 \
+  --mixup_prob 0.2 \
+  --focal_weight 0.15 \
+  --weight_decay 0.06 \
+  --embedding_dropout_rate 0.2 \
+  --attention_loss_lambda 0.01 \
+  --freeze_backbone_epochs 0 \
+  --attention_warmup_epochs 0 \
+  --max_epochs 200 \
+  --embedding_dim 512 \
+  --label_smoothing 0.05 \
+  --metric_weight 0.1 \
+  --arcface_weight 0.9 \
+  --augmentation_preset medium \
+  --loss_type combined_v2 \
+  --metric_loss_type multi_similarity \
+  --miner_type multi_similarity \
+  --use_mixup true \
+  --mixup_alpha 0.1 \
+  --mixup_prob 0.2 \
+  --pooling_type attention \
+  --train_tag train \
+  --val_tag val \
+  --focal_weight 0.15 \
+  --focal_gamma 2.5 \
+  --focal_alpha 0.3 \
+  --visualize_attention_map false
+
+
+step 6 (Final tuning with SWA + Cyclic LR)
+python train_scripts/classification/lightning_train.py \
+  --dataset_name classification_v0.10_train \
+  --output_dir /home/fishial/Fishial/Experiments/v10 \
+  --backbone_model_name beitv2_base_patch16_224.in1k_ft_in22k_in1k \
+  --exclude_classes "unset,Thunnus obesus" \
+  --load_weights_from_checkpoint /home/fishial/Fishial/Experiments/v10/beitv2_base_patch16_224.in1k_ft_in22k_in1k_20260126_133027/checkpoints/model-epoch=32-val/accuracy_epoch=0.9488.ckpt \
+  --image_size 224 \
+  --classes_per_batch 32 \
+  --samples_per_class 6 \
+  --accumulate_grad_batches 3 \
+  --learning_rate 2e-5 \
+  --weight_decay 0.05 \
+  --embedding_dropout_rate 0.15 \
+  --attention_loss_lambda 0.01 \
+  --max_epochs 60 \
+  --embedding_dim 512 \
+  --label_smoothing 0.05 \
+  --metric_weight 0.1 \
+  --arcface_weight 0.9 \
+  --augmentation_preset medium \
+  --loss_type combined_v2 \
+  --metric_loss_type multi_similarity \
+  --miner_type multi_similarity \
+  --focal_weight 0.12 \
+  --focal_gamma 2.0 \
+  --focal_alpha 0.25 \
+  --use_mixup false \
+  --pooling_type attention \
+  --train_tag train \
+  --val_tag val \
+  --visualize_attention_map false \
+  --use_swa true \
+  --swa_lrs 2e-6 \
+  --swa_epoch_start 0.67 \
+  --use_cyclic_lr true \
+  --cyclic_mode warm_restarts \
+  --cyclic_t0 8
+
+  step 6 Balanced (Fix overfitting: train 99.6% → 97%, val 93.8% → 95%+)
+python train_scripts/classification/lightning_train.py \
+  --dataset_name classification_v0.10_train \
+  --output_dir /home/fishial/Fishial/Experiments/v10 \
+  --backbone_model_name beitv2_base_patch16_224.in1k_ft_in22k_in1k \
+  --exclude_classes "unset,Thunnus obesus" \
+  --load_weights_from_checkpoint /home/fishial/Fishial/Experiments/v10/beitv2_base_patch16_224.in1k_ft_in22k_in1k_20260126_133027/checkpoints/model-epoch=32-val/accuracy_epoch=0.9488.ckpt \
+  --image_size 224 \
+  --classes_per_batch 32 \
+  --samples_per_class 6 \
+  --accumulate_grad_batches 3 \
+  --learning_rate 2e-5 \
+  --weight_decay 0.07 \
+  --embedding_dropout_rate 0.2 \
+  --attention_loss_lambda 0.01 \
+  --max_epochs 60 \
+  --embedding_dim 512 \
+  --label_smoothing 0.1 \
+  --metric_weight 0.1 \
+  --arcface_weight 0.9 \
+  --augmentation_preset medium \
+  --loss_type combined_v2 \
+  --metric_loss_type multi_similarity \
+  --miner_type multi_similarity \
+  --focal_weight 0.12 \
+  --focal_gamma 2.0 \
+  --focal_alpha 0.25 \
+  --use_mixup true \
+  --mixup_alpha 0.05 \
+  --mixup_prob 0.15 \
+  --pooling_type attention \
+  --train_tag train \
+  --val_tag val \
+  --visualize_attention_map false \
+  --use_swa true \
+  --swa_lrs 2e-6 \
+  --swa_epoch_start 0.67 \
+  --use_cyclic_lr true \
+  --cyclic_mode warm_restarts \
+  --cyclic_t0 6
+
+# Optional: Try with VERY WEAK MixUp (if above doesn't reach 95%)
+# --use_mixup true \
+# --mixup_alpha 0.05 \
+# --mixup_prob 0.15
+
+
+
+# Step 7: Continue from epoch 60 (Reduced regularization, NO freezing)
+# Result: epoch 59 = 94.98% val accuracy
+# Goal: 95.3-95.6%
+python train_scripts/classification/lightning_train.py \
+  --dataset_name classification_v0.10_train \
+  --output_dir /home/fishial/Fishial/Experiments/v10 \
+  --backbone_model_name beitv2_base_patch16_224.in1k_ft_in22k_in1k \
+  --exclude_classes "unset,Thunnus obesus" \
+  --load_weights_from_checkpoint /home/fishial/Fishial/Experiments/v10/beitv2_base_patch16_224.in1k_ft_in22k_in1k_20260127_073527/checkpoints/model-epoch=58-val/accuracy_epoch=0.9498.ckpt \
+  --image_size 224 \
+  --classes_per_batch 32 \
+  --samples_per_class 6 \
+  --accumulate_grad_batches 3 \
+  --learning_rate 2e-5 \
+  --weight_decay 0.06 \
+  --embedding_dropout_rate 0.17 \
+  --attention_loss_lambda 0.01 \
+  --freeze_backbone_epochs 0 \
+  --max_epochs 200 \
+  --embedding_dim 512 \
+  --label_smoothing 0.08 \
+  --metric_weight 0.1 \
+  --arcface_weight 0.9 \
+  --augmentation_preset medium \
+  --loss_type combined_v2 \
+  --metric_loss_type multi_similarity \
+  --miner_type multi_similarity \
+  --focal_weight 0.12 \
+  --focal_gamma 2.0 \
+  --focal_alpha 0.25 \
+  --use_mixup true \
+  --mixup_alpha 0.03 \
+  --mixup_prob 0.15 \
+  --pooling_type attention \
+  --train_tag train \
+  --val_tag val \
+  --visualize_attention_map false \
+  --use_swa true \
+  --swa_lrs 2e-6 \
+  --swa_epoch_start 0.44 \
+  --use_cyclic_lr true \
+  --cyclic_mode warm_restarts \
+  --cyclic_t0 6
+
+
+# EXPERIMENTAL: Backbone freezing (if val accuracy plateaus at ~95%)
+# Try this ONLY if Step 7 doesn't improve beyond 95.0%
+# 
+# Scenario: Fine-tune head only for final push
+# python train_scripts/classification/lightning_train.py \
+#   --dataset_name classification_v0.10_train \
+#   --output_dir /home/fishial/Fishial/Experiments/v10 \
+#   --backbone_model_name beitv2_base_patch16_224.in1k_ft_in22k_in1k \
+#   --exclude_classes "unset,Thunnus obesus" \
+#   --load_weights_from_checkpoint <best-checkpoint-from-step-7> \
+#   --image_size 224 \
+#   --classes_per_batch 32 \
+#   --samples_per_class 6 \
+#   --accumulate_grad_batches 3 \
+#   --learning_rate 5e-5 \              # Higher LR for head-only
+#   --weight_decay 0.05 \               # Less regularization
+#   --embedding_dropout_rate 0.15 \
+#   --attention_loss_lambda 0.01 \
+#   --freeze_backbone_epochs 999 \      # Freeze backbone for all epochs
+#   --max_epochs 20 \                   # Short fine-tuning
+#   --embedding_dim 512 \
+#   --label_smoothing 0.05 \
+#   --metric_weight 0.1 \
+#   --arcface_weight 0.9 \
+#   --augmentation_preset medium \
+#   --loss_type combined_v2 \
+#   --metric_loss_type multi_similarity \
+#   --miner_type multi_similarity \
+#   --focal_weight 0.12 \
+#   --focal_gamma 2.0 \
+#   --focal_alpha 0.25 \
+#   --use_mixup false \                 # No MixUp for head fine-tuning
+#   --pooling_type attention \
+#   --train_tag train \
+#   --val_tag val \
+#   --visualize_attention_map false \
+#   --use_swa false \                   # No SWA for short fine-tuning
+#   --use_cyclic_lr false               # Constant LR
+
+
+python /home/fishial/Fishial/FishialGithubRepo/fish-identification/train_scripts/classification/posttrain_export_predictions_csv.py \
+  --dataset_name "classification_v0.10_train" \
+  --checkpoint "/home/fishial/Fishial/Experiments/v10/beitv2_base_patch16_224.in1k_ft_in22k_in1k_20260127_073527/checkpoints/model-epoch=58-val/accuracy_epoch=0.9498.ckpt" \
+  --output_dir "/home/fishial/Fishial/Experiments/v10/beitv2_base_patch16_224.in1k_ft_in22k_in1k_20260127_073527" \
+  --backbone_model_name "beitv2_base_patch16_224.in1k_ft_in22k_in1k" \
+  --embedding_dim 512 \
+  --arcface_s 64 \
+  --arcface_m 0.5 \
+  --image_size 224 \
+  --batch_size 64 \
+  --tag "val" \
+  --labels_path "/home/fishial/Fishial/Experiments/v10/beitv2_base_patch16_224.in1k_ft_in22k_in1k_20260127_073527/labels.json" \
+  --use_polyline_mask false \
+  --device cuda \
+  --species_id_field "drawn_fish_id"
+
+
+# Step 8: Create Embedding Database for k-NN Classification
+# Expected improvement: +0.3-0.8% accuracy (94.98% → 95.3-95.8%)
+python train_scripts/classification/create_embedding_database.py \
+  --checkpoint "/home/fishial/Fishial/Experiments/v10/beitv2_base_patch16_224.in1k_ft_in22k_in1k_20260127_073527/checkpoints/model-epoch=58-val/accuracy_epoch=0.9498.ckpt" \
+  --dataset_name "classification_v0.10_train" \
+  --output_dir "/home/fishial/Fishial/Experiments/v10/embedding_database" \
+  --samples_per_class 100 \
+  --batch_size 64 \
+  --exclude_classes "unset,Thunnus obesus"
+
+# OR: Use Jupyter Notebook for interactive testing
+# jupyter notebook notebooks/create_embedding_database_and_test.ipynb

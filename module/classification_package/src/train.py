@@ -1,7 +1,8 @@
 import os
 import numpy as np
 import torch
-from apex import amp
+# from apex import amp
+
 from tqdm import tqdm
 from torch import nn
 from torch.optim import Optimizer
@@ -93,10 +94,9 @@ def train(
                 outputs = model(images)[1]
             
             loss = loss_fn(outputs, labels)
-            with amp.scale_loss(loss, optimizer) as scaled_loss:
-                scaled_loss.backward()
+            loss.backward()
             
-            torch.nn.utils.clip_grad_norm_(amp.master_params(optimizer), max_norm=1.0)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             scheduler.step()
             optimizer.step()
             

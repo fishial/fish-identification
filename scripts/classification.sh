@@ -28,14 +28,14 @@ usage() {
 }
 
 # Default base prefix for file paths
-DEFAULT_PREFIX="/home/fishial/Fishial/TEST_PIPINE/classification_bash"
+DEFAULT_PREFIX="/home/fishial/Fishial/Experiments/classification/v0.10"
 PREFIX="${DEFAULT_PREFIX}"
 
 # Default values for classification dataset creating in fiftyone
-CLASSIFICATION_IMAGE_DIR="/home/fishial/Fishial/dataset/EXPORT_V_0_8_TEST/images_new_test"
-CLASSIFICATION_INPUT="/home/fishial/Fishial/dataset/EXPORT_V_0_8_TEST/data"
-CLASSIFICATION_ANNOTATIONS="/home/fishial/Fishial/dataset/EXPORT_V_0_8_TEST/V.08_Fishial_Export_Jun_21_2024_05_45_Prod_Export_Test_Images_for_testing.json"
-CLASSIFICATION_DS_NAME="classification_v0.82"
+CLASSIFICATION_IMAGE_DIR="/home/fishial/Fishial/dataset/EXPORT_V_0_8/data"
+CLASSIFICATION_INPUT="/home/fishial/Fishial/dataset/EXPORT_V_0_8/data/data"
+CLASSIFICATION_ANNOTATIONS="/home/fishial/Fishial/dataset/EXPORT_V_0_9/Fishial_Export_Jan_08_2026_04_14_Production_AI_Gen_All_Verified.json"
+CLASSIFICATION_DS_NAME="classification_v0.10"
 
 MIN_EVAL_IMG=3
 MAX_PERCENT_EVA_IMG=0.2
@@ -46,8 +46,8 @@ MIN_CNT_IMG=10
 MIN_PER_CLASS=3
 MAX_SAMPLES=120
 EVAL_PERCENT=0.25
-TRAIN_DS_NAME="classification_v0.82_train"
-VALIDATION_DS_NAME="classification_v0.82_validation"
+TRAIN_DS_NAME="classification_v0.10_train"
+VALIDATION_DS_NAME="classification_v0.10_validation"
 
 # Classification training defaults for triplet loss
 OUTPUT_FOLDER_CLASSIFICATION="$PREFIX/triplet_loss"
@@ -63,7 +63,8 @@ EPOCH=2
 EVAL_EPOCH=2
 OPT_LEVEL="O1"
 FILE_NAME="experiment_01"
-DEVICE="cuda"
+DEVICE="cpu"
+
 
 # Cross entropy training defaults
 OUTPUT_FOLDER_CROSS_ENTROPY="$PREFIX/cross_entropy"
@@ -164,8 +165,8 @@ train_classification_cross_entropy() {
 }
 
 echo "Starting classification pipeline..."
-create_classification_dataset
+# create_classification_dataset
 split_classification_dataset
-train_classification_triplet
-train_classification_cross_entropy
+# train_classification_triplet
+# train_classification_cross_entropy
 echo "Classification pipeline finished."

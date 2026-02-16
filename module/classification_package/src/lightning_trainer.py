@@ -42,6 +42,8 @@ class ImageEmbeddingTrainerViT(pl.LightningModule):
         load_checkpoint: str = None,
         output_dir: str = "output_dir",
         visualize_attention_map: bool = False,
+        seed: int = 42,
+        count_random_img: int = 63,
     ):
         """
         Args:
@@ -52,6 +54,11 @@ class ImageEmbeddingTrainerViT(pl.LightningModule):
             weight_decay (float): The weight decay for the AdamW optimizer.
             lr_eta_min (float): The minimum learning rate for the cosine annealing scheduler.
             attention_loss_lambda (float): The weight for the attention guidance loss.
+            load_checkpoint (str, optional): Path to checkpoint file to load.
+            output_dir (str): Directory for saving outputs and visualizations.
+            visualize_attention_map (bool): Whether to visualize attention maps during validation.
+            seed (int): Random seed for reproducibility.
+            count_random_img (int): Number of random images to visualize per epoch.
         """
         super().__init__()
         # This saves all hyperparameters to self.hparams and makes them accessible
@@ -65,9 +72,11 @@ class ImageEmbeddingTrainerViT(pl.LightningModule):
             backbone_model_name=self.hparams.backbone_model_name,
         )
         
+        # Ensure output directory exists
+        os.makedirs(output_dir, exist_ok=True)
+        
         if load_checkpoint:
             self._load_weights(load_checkpoint)
-            
 
         # --- Loss Functions ---
         self.main_loss_fn = CombinedLoss()
@@ -82,8 +91,20 @@ class ImageEmbeddingTrainerViT(pl.LightningModule):
 
         
     def _load_weights(self, path):
-        state_dict = torch.load(path, map_location=self.device)
-        self.load_state_dict(state_dict.get("state_dict", state_dict), strict=False)
+        """Load weights from checkpoint with proper error handling."""
+        if not os.path.exists(path):
+            raise FileNotFoundError(f"Checkpoint file not found: {path}")
+        try:
+            # Load to CPU first, then move to device to avoid device mismatch issues
+            state_dict = torch.load(path, map_location='cpu')
+            state_dict = state_dict.get("state_dict", state_dict)
+            missing_keys, unexpected_keys = self.load_state_dict(state_dict, strict=False)
+            if missing_keys:
+                print(f"Warning: Missing keys in checkpoint: {missing_keys[:5]}...")  # Show first 5
+            if unexpected_keys:
+                print(f"Warning: Unexpected keys in checkpoint: {unexpected_keys[:5]}...")  # Show first 5
+        except Exception as e:
+            raise RuntimeError(f"Failed to load checkpoint from {path}: {e}")
         
     def forward(self, x, labels=None, object_mask=None):
         """
@@ -102,15 +123,28 @@ class ImageEmbeddingTrainerViT(pl.LightningModule):
     
     
     def on_fit_start(self):
-        seed = 42  # или передай через аргументы
-        random.seed(seed)
-        np.random.seed(seed)
-        torch.manual_seed(seed)
+        """Initialize seeds and visualization indices at the start of training."""
+        # Use pl.seed_everything for comprehensive seed setting
+        pl.seed_everything(self.hparams.seed, workers=True)
         
-        COUNT_RANDOM_IMG = 63
-
-        total_val_size = len(self.trainer.datamodule.val_dataloader().dataset)
-        self.visualization_indices = set(random.sample(range(total_val_size), COUNT_RANDOM_IMG))
+        # Setup visualization indices
+        if hasattr(self.trainer, 'datamodule') and self.trainer.datamodule is not None:
+            try:
+                val_dataloader = self.trainer.datamodule.val_dataloader()
+                if val_dataloader is not None and hasattr(val_dataloader, 'dataset'):
+                    total_val_size = len(val_dataloader.dataset)
+                    count_to_sample = min(self.hparams.count_random_img, total_val_size)
+                    if count_to_sample > 0:
+                        self.visualization_indices = set(random.sample(range(total_val_size), count_to_sample))
+                    else:
+                        self.visualization_indices = set()
+                else:
+                    self.visualization_indices = set()
+            except Exception as e:
+                print(f"Warning: Could not setup visualization indices: {e}")
+                self.visualization_indices = set()
+        else:
+            self.visualization_indices = set()
 
     def training_step(self, batch, batch_idx):
         x, y, object_mask = batch
@@ -162,9 +196,11 @@ class ImageEmbeddingTrainerViT(pl.LightningModule):
         self.log("train/loss_main", loss_main, on_step=False, on_epoch=True)
         self.log("train/loss_attn_guidance", loss_attention_guidance, on_step=False, on_epoch=True)
         
-        # Update and log accuracy
-        preds = torch.argmax(arc_logits, dim=1)
-        self.train_accuracy.update(preds, y)
+        # Update and log accuracy (use raw logits without margin for accurate metrics)
+        with torch.no_grad():
+            raw_logits = self.model.arcface_head(emb)  # Get logits without margin
+            preds = torch.argmax(raw_logits, dim=1)
+            self.train_accuracy.update(preds, y)
         self.log("train/accuracy", self.train_accuracy, on_step=True, on_epoch=True, prog_bar=True)
         
         return total_loss
@@ -173,20 +209,19 @@ class ImageEmbeddingTrainerViT(pl.LightningModule):
         x, y, object_mask = batch
         
         # Get model outputs for the validation batch.
-        emb, arc_logits, attn_map = self(x, labels=y, object_mask=object_mask)
+        # During validation, forward returns probabilities (softmax) when not training
+        emb, probabilities, attn_map = self(x, object_mask=object_mask)
 
-        # Calculate the main validation loss.
-        loss = self.main_loss_fn(emb, arc_logits, y)
+        # Calculate the main validation loss (need logits with margin for loss)
+        arc_logits_with_margin = self.model.arcface_head(emb, labels=y)
+        loss = self.main_loss_fn(emb, arc_logits_with_margin, y)
         
         # --- Logging ---
         self.log("val/loss", loss, on_step=False, on_epoch=True, prog_bar=True)
 
-        # Update validation accuracy metric.
-        preds = torch.argmax(arc_logits, dim=1)
+        # Update validation accuracy metric using probabilities
+        preds = torch.argmax(probabilities, dim=1)
         self.val_accuracy.update(preds, y)
-        
-        # Note: At the end of the epoch, Lightning will automatically compute and log
-        # the aggregated accuracy from all validation steps.
 
     def on_validation_epoch_start(self):
         if not self.hparams.visualize_attention_map: return
@@ -208,12 +243,14 @@ class ImageEmbeddingTrainerViT(pl.LightningModule):
             img_folder_path_to_save = os.path.join(self.hparams.output_dir, "visualize", f"img_{img_id}")
             os.makedirs(img_folder_path_to_save, exist_ok=True)
 
-            tmp_image_name = f"debug_tmp.png"
-            vutils.save_image(tensor_img[0].cpu(), tmp_image_name, normalize=True)
+            # Convert tensor directly to PIL Image without saving to disk
+            # Normalize tensor to [0, 1] range and convert to uint8
+            img_tensor = tensor_img[0].cpu()
+            img_tensor = (img_tensor - img_tensor.min()) / (img_tensor.max() - img_tensor.min() + 1e-8)
+            img_array = (img_tensor * 255).clamp(0, 255).permute(1, 2, 0).numpy().astype(np.uint8)
+            pil_image = Image.fromarray(img_array)
 
-            pil_image = Image.open(tmp_image_name).convert('RGB')
             img_path = os.path.join(img_folder_path_to_save, f"epoch_{self.current_epoch}.png")
-
             save_attention_overlay(pil_image, attn_map, save_path=img_path, title=f"Epoch: {self.current_epoch}")
             
     def on_validation_epoch_end(self):
@@ -222,7 +259,8 @@ class ImageEmbeddingTrainerViT(pl.LightningModule):
         """
         # Log the final epoch accuracy. The metric object handles the aggregation.
         self.log("val/accuracy_epoch", self.val_accuracy.compute(), prog_bar=True)
-        # The metric is automatically reset for the next epoch by Lightning.
+        # Explicitly reset the metric for the next epoch
+        self.val_accuracy.reset()
         
     def configure_optimizers(self):
         """
@@ -246,7 +284,8 @@ class ImageEmbeddingTrainerViT(pl.LightningModule):
             "optimizer": optimizer,
             "lr_scheduler": {
                 "scheduler": scheduler,
-                "monitor": "val/loss", # Monitor the validation loss to adjust LR.
+                # Note: CosineAnnealingLR doesn't support 'monitor' parameter
+                # It schedules based on epoch count, not metric values
                 "interval": "epoch",
                 "frequency": 1
             }
@@ -273,16 +312,23 @@ class ImageEmbeddingTrainerConvnext(pl.LightningModule):
         load_checkpoint: str = None,
         output_dir: str = "output_dir",
         visualize_attention_map: bool = False,
+        seed: int = 42,
+        count_random_img: int = 63,
     ):
         """
         Args:
             num_classes (int): The number of classes for the classification head.
             embedding_dim (int): The dimensionality of the output embeddings.
-            backbone_model_name (str): The name of the ViT backbone from the `timm` library.
+            backbone_model_name (str): The name of the backbone model from the `timm` library (e.g., 'convnext_tiny').
             lr (float): The learning rate for the optimizer.
             weight_decay (float): The weight decay for the AdamW optimizer.
             lr_eta_min (float): The minimum learning rate for the cosine annealing scheduler.
             attention_loss_lambda (float): The weight for the attention guidance loss.
+            load_checkpoint (str, optional): Path to checkpoint file to load.
+            output_dir (str): Directory for saving outputs and visualizations.
+            visualize_attention_map (bool): Whether to visualize attention maps during validation.
+            seed (int): Random seed for reproducibility.
+            count_random_img (int): Number of random images to visualize per epoch.
         """
         super().__init__()
         # This saves all hyperparameters to self.hparams and makes them accessible
@@ -296,9 +342,11 @@ class ImageEmbeddingTrainerConvnext(pl.LightningModule):
             backbone_model_name=self.hparams.backbone_model_name,
         )
         
+        # Ensure output directory exists
+        os.makedirs(output_dir, exist_ok=True)
+        
         if load_checkpoint:
             self._load_weights(load_checkpoint)
-            
 
         # --- Loss Functions ---
         self.main_loss_fn = CombinedLoss()
@@ -313,12 +361,24 @@ class ImageEmbeddingTrainerConvnext(pl.LightningModule):
 
         
     def _load_weights(self, path):
-        state_dict = torch.load(path, map_location=self.device)
-        self.load_state_dict(state_dict.get("state_dict", state_dict), strict=False)
+        """Load weights from checkpoint with proper error handling."""
+        if not os.path.exists(path):
+            raise FileNotFoundError(f"Checkpoint file not found: {path}")
+        try:
+            # Load to CPU first, then move to device to avoid device mismatch issues
+            state_dict = torch.load(path, map_location='cpu')
+            state_dict = state_dict.get("state_dict", state_dict)
+            missing_keys, unexpected_keys = self.load_state_dict(state_dict, strict=False)
+            if missing_keys:
+                print(f"Warning: Missing keys in checkpoint: {missing_keys[:5]}...")  # Show first 5
+            if unexpected_keys:
+                print(f"Warning: Unexpected keys in checkpoint: {unexpected_keys[:5]}...")  # Show first 5
+        except Exception as e:
+            raise RuntimeError(f"Failed to load checkpoint from {path}: {e}")
         
     def forward(self, x, labels=None, object_mask=None):
         """
-        Performs a forward pass through the underlying StableEmbeddingModelViT.
+        Performs a forward pass through the underlying StableEmbeddingModel.
         
         Note: The model returns raw logits during training and softmax probabilities
         during evaluation.
@@ -333,15 +393,28 @@ class ImageEmbeddingTrainerConvnext(pl.LightningModule):
     
     
     def on_fit_start(self):
-        seed = 42  # или передай через аргументы
-        random.seed(seed)
-        np.random.seed(seed)
-        torch.manual_seed(seed)
+        """Initialize seeds and visualization indices at the start of training."""
+        # Use pl.seed_everything for comprehensive seed setting
+        pl.seed_everything(self.hparams.seed, workers=True)
         
-        COUNT_RANDOM_IMG = 63
-
-        total_val_size = len(self.trainer.datamodule.val_dataloader().dataset)
-        self.visualization_indices = set(random.sample(range(total_val_size), COUNT_RANDOM_IMG))
+        # Setup visualization indices
+        if hasattr(self.trainer, 'datamodule') and self.trainer.datamodule is not None:
+            try:
+                val_dataloader = self.trainer.datamodule.val_dataloader()
+                if val_dataloader is not None and hasattr(val_dataloader, 'dataset'):
+                    total_val_size = len(val_dataloader.dataset)
+                    count_to_sample = min(self.hparams.count_random_img, total_val_size)
+                    if count_to_sample > 0:
+                        self.visualization_indices = set(random.sample(range(total_val_size), count_to_sample))
+                    else:
+                        self.visualization_indices = set()
+                else:
+                    self.visualization_indices = set()
+            except Exception as e:
+                print(f"Warning: Could not setup visualization indices: {e}")
+                self.visualization_indices = set()
+        else:
+            self.visualization_indices = set()
 
     def training_step(self, batch, batch_idx):
         x, y, object_mask = batch
@@ -356,10 +429,9 @@ class ImageEmbeddingTrainerConvnext(pl.LightningModule):
             features = self.model.backbone_feature_extractor(x)
          
         raw_attention_scores = self.model.pooling.attention_conv(features)
-        raw_attention_weights = torch.sigmoid(raw_attention_scores) # Это то, что мы хотим обучать
+        # Note: BCEWithLogitsLoss expects raw logits, not sigmoid outputs
+        # We'll use raw_attention_scores directly for loss calculation
         
-        emb, arc_logits, _final_attn_map_for_viz = self(x, labels=y, object_mask=object_mask) 
-
         # --- Main Training Logic ---
         # Perform a full forward pass to get embeddings and final classification logits.
         emb, arc_logits, _ = self(x, labels=y, object_mask=object_mask)
@@ -367,15 +439,17 @@ class ImageEmbeddingTrainerConvnext(pl.LightningModule):
         # Calculate the main loss (e.g., ArcFace loss + metric loss).
         loss_main = self.main_loss_fn(emb, arc_logits, y)
         
-        B, _, H_attn, W_attn = raw_attention_weights.shape
+        # Prepare target mask for attention guidance loss
+        B, _, H_attn, W_attn = raw_attention_scores.shape
         
-        object_mask_gt_for_loss = object_mask.float().to(raw_attention_weights.device)
+        object_mask_gt_for_loss = object_mask.float().to(raw_attention_scores.device)
         if object_mask_gt_for_loss.ndim == 3:
             object_mask_gt_for_loss = object_mask_gt_for_loss.unsqueeze(1)
 
         target_attention_mask = F.interpolate(object_mask_gt_for_loss, size=(H_attn, W_attn), mode='nearest')
         
-        loss_attention_guidance = self.attention_guidance_loss_fn(raw_attention_weights, target_attention_mask)
+        # Use raw logits (not sigmoid) for BCEWithLogitsLoss
+        loss_attention_guidance = self.attention_guidance_loss_fn(raw_attention_scores, target_attention_mask)
         
         # Combine the losses.
         total_loss = loss_main + self.hparams.attention_loss_lambda * loss_attention_guidance
@@ -385,9 +459,11 @@ class ImageEmbeddingTrainerConvnext(pl.LightningModule):
         self.log("train/loss_main", loss_main, on_step=False, on_epoch=True)
         self.log("train/loss_attn_guidance", loss_attention_guidance, on_step=False, on_epoch=True)
         
-        # Update and log accuracy
-        preds = torch.argmax(arc_logits, dim=1)
-        self.train_accuracy.update(preds, y)
+        # Update and log accuracy (use raw logits without margin for accurate metrics)
+        with torch.no_grad():
+            raw_logits = self.model.arcface_head(emb)  # Get logits without margin
+            preds = torch.argmax(raw_logits, dim=1)
+            self.train_accuracy.update(preds, y)
         self.log("train/accuracy", self.train_accuracy, on_step=True, on_epoch=True, prog_bar=True)
         
         return total_loss
@@ -396,20 +472,19 @@ class ImageEmbeddingTrainerConvnext(pl.LightningModule):
         x, y, object_mask = batch
         
         # Get model outputs for the validation batch.
-        emb, arc_logits, attn_map = self(x, labels=y, object_mask=object_mask)
+        # During validation, forward returns probabilities (softmax) when not training
+        emb, probabilities, attn_map = self(x, object_mask=object_mask)
 
-        # Calculate the main validation loss.
-        loss = self.main_loss_fn(emb, arc_logits, y)
+        # Calculate the main validation loss (need logits with margin for loss)
+        arc_logits_with_margin = self.model.arcface_head(emb, labels=y)
+        loss = self.main_loss_fn(emb, arc_logits_with_margin, y)
         
         # --- Logging ---
         self.log("val/loss", loss, on_step=False, on_epoch=True, prog_bar=True)
 
-        # Update validation accuracy metric.
-        preds = torch.argmax(arc_logits, dim=1)
+        # Update validation accuracy metric using probabilities
+        preds = torch.argmax(probabilities, dim=1)
         self.val_accuracy.update(preds, y)
-        
-        # Note: At the end of the epoch, Lightning will automatically compute and log
-        # the aggregated accuracy from all validation steps.
 
     def on_validation_epoch_start(self):
         if not self.hparams.visualize_attention_map: return
@@ -431,12 +506,14 @@ class ImageEmbeddingTrainerConvnext(pl.LightningModule):
             img_folder_path_to_save = os.path.join(self.hparams.output_dir, "visualize", f"img_{img_id}")
             os.makedirs(img_folder_path_to_save, exist_ok=True)
 
-            tmp_image_name = f"debug_tmp.png"
-            vutils.save_image(tensor_img[0].cpu(), tmp_image_name, normalize=True)
+            # Convert tensor directly to PIL Image without saving to disk
+            # Normalize tensor to [0, 1] range and convert to uint8
+            img_tensor = tensor_img[0].cpu()
+            img_tensor = (img_tensor - img_tensor.min()) / (img_tensor.max() - img_tensor.min() + 1e-8)
+            img_array = (img_tensor * 255).clamp(0, 255).permute(1, 2, 0).numpy().astype(np.uint8)
+            pil_image = Image.fromarray(img_array)
 
-            pil_image = Image.open(tmp_image_name).convert('RGB')
             img_path = os.path.join(img_folder_path_to_save, f"epoch_{self.current_epoch}.png")
-
             save_attention_overlay(pil_image, attn_map, save_path=img_path, title=f"Epoch: {self.current_epoch}")
             
     def on_validation_epoch_end(self):
@@ -445,7 +522,8 @@ class ImageEmbeddingTrainerConvnext(pl.LightningModule):
         """
         # Log the final epoch accuracy. The metric object handles the aggregation.
         self.log("val/accuracy_epoch", self.val_accuracy.compute(), prog_bar=True)
-        # The metric is automatically reset for the next epoch by Lightning.
+        # Explicitly reset the metric for the next epoch
+        self.val_accuracy.reset()
         
     def configure_optimizers(self):
         """
@@ -469,7 +547,8 @@ class ImageEmbeddingTrainerConvnext(pl.LightningModule):
             "optimizer": optimizer,
             "lr_scheduler": {
                 "scheduler": scheduler,
-                "monitor": "val/loss", # Monitor the validation loss to adjust LR.
+                # Note: CosineAnnealingLR doesn't support 'monitor' parameter
+                # It schedules based on epoch count, not metric values
                 "interval": "epoch",
                 "frequency": 1
             }
