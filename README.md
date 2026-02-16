@@ -156,7 +156,7 @@ The following checkpoints are organized by task. TorchScript-ready artifacts are
 
 ### Classification Model
 
-A JSON file containing the names of all fish classes recognized by the latest model can be found here: **[labels.json](labels_v10.json)**.
+A JSON file containing the names of all fish classes recognized by the latest model can be found here: **[labels.json](labels.json)**.
 
 -----
 
