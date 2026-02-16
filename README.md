@@ -35,6 +35,10 @@ Make sure you have Python 3.x installed.
 pip3 install -r requirements.txt
 ```
 
+**3. Verify requirements:**
+- `python3 --version` should report Python 3.10 or newer.
+- Use the pinned dependencies in `requirements.txt` and recreate your virtual environment if you switch Python versions.
+
 ## ⚙️ How to Run Scripts
 
 First, make the shell scripts executable:
@@ -101,30 +105,57 @@ Here's a breakdown of the most important scripts and modules in this project.
 
 -----
 
+## 🧭 What’s Inside
+
+The repository combines segmentation, detection, and classification tooling with helper notebooks and export utilities:
+
+- **Segmentation pipelines**: Detectron2-based training scripts, augmentations, and export helpers.
+- **Object detection**: YOLO training, validation, and inference helpers focused on bounding-box detection.
+- **Classification**: Cross-entropy and metric-based training scripts plus inference helpers that produce class embeddings.
+- **Helpers & notebooks**: Utility notebooks, embedding database tools, and TorchScript export utilities keep deployment workflows tidy.
+
 ## 📦 Pre-trained Models
 
-We provide several pre-trained models for immediate use. The latest models are marked with ⭐.
+The following checkpoints are organized by task. TorchScript-ready artifacts are highlighted when available.
 
-| Model Description                                                                | Download Link                                                                                                 |
-| -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| **⭐ Fish Detector BoundingBox** - YOLOv12 Medium (img size 640, torchscript)      | [link](https://storage.googleapis.com/fishial-ml-resources/detector_v10_m5.zip)                               |
-| **⭐ Fish Classification** - beitv2_base_patch16_224 (640 classes, embed 512, torchscript)  | [link](https://storage.googleapis.com/fishial-ml-resources/classification_rectangle_v9-3.zip)                 |
-| **⭐ Fish Classification** - ConvNeXt Tiny (640 classes, embed 256, torchscript)  | [link](https://storage.googleapis.com/fishial-ml-resources/classification_rectangle_v9-2.zip)                 |
-| **⭐ Fish Segmentation** - FPN w/ ResNet18 (img size 416, torchscript)            | [link](https://storage.googleapis.com/fishial-ml-resources/segmentator_fpn_res18_416_1.zip)                     |
-| Fish Detector BoundingBox - YOLOv10 Medium (img size 640, torchscript)      | [link](https://storage.googleapis.com/fishial-ml-resources/detector_v10_m3.zip)                               |
-| Fish Classification - ConvNeXt Tiny (426 classes, embed 128, torchscript)  | [link](https://storage.googleapis.com/fishial-ml-resources/classification_rectangle_v7-1.zip)                 |
-| Fish Segmentation - FPN w/ ResNet18 (img size 416, torchscript)            | [link](https://storage.googleapis.com/fishial-ml-resources/segmentator_fpn_res18_416_1.zip)                     |
-| MaskRCNN Fish Segmentation (Updated 21.08.2023)                                  | [link](https://storage.googleapis.com/fishial-ml-resources/model_21_08_2023.pth)                                |
-| MaskRCNN Fish Segmentation (Updated 21.08.2023, torchscript)                     | [link](https://storage.googleapis.com/fishial-ml-resources/segmentation_21_08_2023.ts)                          |
-| ResNet18 v6 model pack (289 classes)                                             | [link](https://storage.googleapis.com/fishial-ml-resources/classification_fishial_30_06_2023.zip)             |
-| ResNet18 v5 model pack (184 classes)                                             | [link](https://storage.googleapis.com/fishial-ml-resources/classification_22_12.zip)                            |
-| MaskRCNN Fish Segmentation (Updated 15.11.2022)                                  | [link](https://storage.googleapis.com/fishial-ml-resources/model_15_11_2022.pth)                                |
-| ResNet18 v4 model pack (184 classes)                                             | [link](https://storage.googleapis.com/fishial-ml-resources/classification_v5.zip)                             |
-| ResNet18 DataBase Tensor                                                         | [link](https://storage.googleapis.com/fishial-ml-resources/models_29.06.2022/train%2Btest_embedding.pt)        |
-| ResNet18 Fish Classification Embedding 256 V2.0                                  | [link](https://storage.googleapis.com/fishial-ml-resources/models_29.06.2022/full_256.ckpt)                    |
-| ResNet18 Binary Classification                                                   | [link](https://storage.cloud.google.com/fishial-ml-resources/binary_class.ckpt)                               |
-| ResNet18 Fish Classification Cross Entropy V1.0                                  | [link](https://storage.googleapis.com/fishial-ml-resources/final_cross_cross_entropy_0.9923599320882852_258571.0.ckpt) |
-| MaskRCNN Fish Segmentation (Updated 29.06.2022)                                  | [link](https://storage.googleapis.com/fishial-ml-resources/models_29.06.2022/model_0259999.pth)                |
+### Detection
+
+| Model | Notes | Download |
+| --- | --- | --- |
+| **⭐ YOLO v26 Fish Detector** | TorchScript; latest export | [download](https://storage.googleapis.com/fishial-ml-resources/detector_v26_n3.zip) |
+| YOLOv12 Medium Fish Detector | TorchScript; previous medium-sized detector | [download](https://storage.googleapis.com/fishial-ml-resources/detector_v10_m5.zip) |
+| YOLOv10 Medium Fish Detector | TorchScript; earlier balanced model | [download](https://storage.googleapis.com/fishial-ml-resources/detector_v10_m3.zip) |
+
+### Classification
+
+| Model | Notes | Download |
+| --- | --- | --- |
+| **⭐ beitv2_base_patch16_224 (775 classes)** | Embedding size 512; TorchScript export | [download](https://storage.googleapis.com/fishial-ml-resources/classification_model_v0.10.zip) |
+| beitv2_base_patch16_224 (640 classes) | Embedding 512; previous TorchScript pack | [download](https://storage.googleapis.com/fishial-ml-resources/classification_rectangle_v9-3.zip) |
+| ConvNeXt Tiny (640 classes) | Embedding 256; TorchScript | [download](https://storage.googleapis.com/fishial-ml-resources/classification_rectangle_v9-2.zip) |
+| ConvNeXt Tiny (426 classes) | Embedding 128; TorchScript | [download](https://storage.googleapis.com/fishial-ml-resources/classification_rectangle_v7-1.zip) |
+| ResNet18 v6 model pack (289 classes) | ResNet-based classifier bundle | [download](https://storage.googleapis.com/fishial-ml-resources/classification_fishial_30_06_2023.zip) |
+| ResNet18 v5 model pack (184 classes) | Legacy ResNet18 set | [download](https://storage.googleapis.com/fishial-ml-resources/classification_22_12.zip) |
+| ResNet18 v4 model pack (184 classes) | Early ResNet18 release | [download](https://storage.googleapis.com/fishial-ml-resources/classification_v5.zip) |
+| ResNet18 DataBase Tensor | Embedding tensor from train+test | [download](https://storage.googleapis.com/fishial-ml-resources/models_29.06.2022/train%2Btest_embedding.pt) |
+| ResNet18 Embedding 256 V2.0 | Full embedding checkpoint | [download](https://storage.googleapis.com/fishial-ml-resources/models_29.06.2022/full_256.ckpt) |
+| ResNet18 Binary Classification | Binary ResNet18 checkpoint | [download](https://storage.cloud.google.com/fishial-ml-resources/binary_class.ckpt) |
+| ResNet18 Cross Entropy V1.0 | High-accuracy ResNet18 checkpoint | [download](https://storage.googleapis.com/fishial-ml-resources/final_cross_cross_entropy_0.9923599320882852_258571.0.ckpt) |
+
+### Segmentation
+
+| Model | Notes | Download |
+| --- | --- | --- |
+| **⭐ FPN w/ ResNet18 (segmentation)** | TorchScript-ready backbone (img size 416) | [download](https://storage.googleapis.com/fishial-ml-resources/segmentator_fpn_res18_416_1.zip) |
+| MaskRCNN Fish Segmentation (Updated 21.08.2023) | Detectron2 checkpoint | [download](https://storage.googleapis.com/fishial-ml-resources/model_21_08_2023.pth) |
+| MaskRCNN Fish Segmentation (Updated 21.08.2023, TorchScript) | TorchScript export | [download](https://storage.googleapis.com/fishial-ml-resources/segmentation_21_08_2023.ts) |
+| MaskRCNN Fish Segmentation (Updated 15.11.2022) | Older Detectron2 checkpoint | [download](https://storage.googleapis.com/fishial-ml-resources/model_15_11_2022.pth) |
+| MaskRCNN Fish Segmentation (Updated 29.06.2022) | Legacy checkpoint | [download](https://storage.googleapis.com/fishial-ml-resources/models_29.06.2022/model_0259999.pth) |
+
+## ❓ Need help?
+
+- Open an issue in this repository if you hit a bug or need clarification.
+- For general questions, tag `@fishial` or use the Fishial.ai Slack/Discord channels linked on the main site.
 
 -----
 
