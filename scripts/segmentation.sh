@@ -28,12 +28,21 @@ usage() {
 
 # Default values
 # Coco file json export path
-COCO_FILE="/home/fishial/Fishial/dataset/EXPORT_V_0_9/Fishial_Export_Jan_07_2026_05_15_Prod_Export_Test_Images_for_testing.json"
+COCO_FILE="/home/fishial/Fishial/dataset/EXPORT_V_0_9/Fishial_Export_Jan_08_2026_04_14_Production_AI_Gen_All_Verified.json"
 # directory where images are saved
-IMAGES_DIR="/home/fishial/Fishial/dataset/EXPORT_V_0_8_TEST/data"
+IMAGES_DIR="/home/fishial/Fishial/dataset/EXPORT_V_0_8/data"
 
 # Fiftyone dataset name
-DATASET_SEGMENT="segmentation_dataset_v0.10_TEST"
+DATASET_SEGMENT="segmentation_dataset_v0.10_with_meta"
+
+
+# COCO_FILE="/home/fishial/Fishial/dataset/EXPORT_V_0_9/Fishial_Export_Jan_07_2026_05_15_Prod_Export_Test_Images_for_testing.json"
+# # directory where images are saved
+# IMAGES_DIR="/home/fishial/Fishial/dataset/EXPORT_V_0_8_TEST/data"
+
+# # Fiftyone dataset name
+# DATASET_SEGMENT="segmentation_dataset_v0.10_TEST"
+
 
 # Directore for save segmentation model files
 SAVE_DIR_SEGMENTATION="/home/fishial/Fishial/TEST_PIPINE/segmentation_bash"

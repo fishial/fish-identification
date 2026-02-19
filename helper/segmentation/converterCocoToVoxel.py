@@ -171,7 +171,9 @@ class CocoToVoxelConverter:
                     label=category['supercategory'],
                     points=[polylines],
                     closed=False,
-                    filled=True
+                    filled=True,
+                    drawn_fish_id=drawn_fish_id,
+                    ann_id=ann_id
                 )
                 
                 if category['name'] in dict_of_labels:
