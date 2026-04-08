@@ -1,12 +1,14 @@
-import argparse
+import sys
+sys.path.append('/home/andrew/Andrew/Fishial2402/fish-identification')
+
 import json
-import os
 from pathlib import Path
 
 import fiftyone as fo
 from PIL import Image, ImageDraw
 import numpy as np
-from model_stage_v10.inference import EmbeddingClassifier
+
+from module.classification_package.fish_inference import FishInferenceEngine
 from tqdm import tqdm
 
 def normalized_to_pixels(points, width, height):
@@ -23,21 +25,21 @@ def flatten_polyline_points(points_list, width, height):
 
 def crop_polygon_mask(image, polygon):
     """
-    Возвращает изображение, где объект внутри полигона виден,
-    а остальное прозрачное (маска объекта).
+    Returns an image where the object inside the polygon is visible,
+    and the rest is transparent (object mask).
     """
     if not polygon:
         return None
 
-    # Создаем маску для полигона
+    # Create a mask for the polygon
     mask = Image.new("L", image.size, 0)
     ImageDraw.Draw(mask).polygon(polygon, fill=255)
 
-    # Создаем новое изображение с прозрачным фоном
+    # Create a new image with a transparent background
     result = Image.new("RGB", image.size, (0, 0, 0, 0))
     result.paste(image, mask=mask)
 
-    # Вырезаем прямоугольник вокруг полигона для компактного размера
+    # Crop a rectangle around the polygon for a compact size
     xs, ys = zip(*polygon)
     bbox = (
         max(int(min(xs)), 0),
@@ -69,43 +71,43 @@ def crop_polygon(image, polygon):
     ImageDraw.Draw(mask).polygon(polygon, outline=255, fill=255)
 
     cropped_image = image.crop(bbox)
-    return cropped_image
+    return cropped_image, bbox
 
-classifier_config = {
-    'log_level': 'INFO',
-    'dataset': {
-        'path': 'model_stage_v10/database.pt'
-        },
-    'model': {
-        'checkpoint_path': 'model_stage_v10/model.ckpt',
-        'backbone_model_name': 'beitv2_base_patch16_224.in1k_ft_in22k_in1k',
-        'embedding_dim': 512,
-        'num_classes': 775,
-        'arcface_s': 64.0,
-        'arcface_m': 0.2,
-        'pooling_type': 'attention',
-        'device': 'cuda'
-    },
-    'use_knn':True,
-    # Settings kNN (optional)
-    'topk_centroid': 5,
-    'topk_neighbors': 10,
-    'centroid_threshold': 0.7,
-    'neighbor_threshold': 0.8,
-    'rerank_mode': 'weighted_fusion',
-    'arcface_weight': 0.6,
-    'knn_weight': 0.4,
-    'rrf_k': 60,
-    'use_albumentations': True,
+
+OUTPUT_PATHS = {
+    "arcface_logits": Path("dinov2_arcface_logits_production_v18_866.json"),
+    "arcface_centroid": Path("dinov2_arcface_centroid_production_v18_866.json"),
+    "natural_centroid": Path("dinov2_natural_centroid_production_v18_866.json"),
 }
 
-EmbeddingClassifier = EmbeddingClassifier(classifier_config)
-dataset = fo.load_dataset("segmentation_dataset_v0.10_with_meta")
+BUNDLE_PATH = '/home/andrew/Andrew/Fishial2402/fish-identification/notebooks/model_bundle.pt'
 
-results = []
+# Initialize the inference engine
+EmbeddingClassifier = FishInferenceEngine.from_bundle(BUNDLE_PATH)
+EmbeddingClassifier.warmup()
+
+# Load the FiftyOne dataset
+dataset = fo.load_dataset("segmentation_dataset_v0.11_with_meta")
+
+results_by_method = {key: [] for key in OUTPUT_PATHS}
 
 total_annotations = 0
-total_first_correct = 0
+total_first_correct = {key: 0 for key in OUTPUT_PATHS}
+
+
+def _sorted_names_accuracy(fish_result):
+    """Helper to extract and sort names and accuracies from the inference result."""
+    if fish_result is None:
+        return [], []
+    sorted_result = sorted(
+        fish_result.top_k,
+        key=lambda item: item.accuracy if item.accuracy is not None else 0.0,
+        reverse=True,
+    )
+    names = [str(i.name) for i in sorted_result]
+    accuracy = [round(float(i.accuracy or 0.0), 3) for i in sorted_result]
+    return names, accuracy
+
 
 with tqdm(dataset, desc="Evaluating", unit="sample") as progress:
     for sample in progress:
@@ -114,6 +116,7 @@ with tqdm(dataset, desc="Evaluating", unit="sample") as progress:
 
         image_id = sample['image_id']
 
+        # Iterate through fish annotations in the sample
         for idx, polyline in enumerate(sample['General body shape']['polylines']):
             drawn_fish_id = polyline['drawn_fish_id']
             ann_id = polyline['ann_id']
@@ -127,36 +130,54 @@ with tqdm(dataset, desc="Evaluating", unit="sample") as progress:
 
             gt_label = polyline.label or "unnamed"
 
-            object_pil_img = crop_polygon(image, polygon)
-            if object_pil_img is None:
-                continue
+            # Crop the object based on the polygon
+            object_pil_img, bbox = crop_polygon(image, polygon)
 
-            result = EmbeddingClassifier.inference_numpy(np.array(object_pil_img))
-
-            sorted_result = sorted(result, key=lambda item: item.accuracy if item.accuracy is not None else 0.0, reverse=True)
-            names = [str(i.name) for i in sorted_result]
-            accuracy = [round(float(i.accuracy or 0.0), 3) for i in sorted_result]
+            # Predict using all available methods in the engine
+            all_res = EmbeddingClassifier.predict_all_methods(
+                images=np.array(image),
+                bboxes=bbox,
+                polys=polygon,
+            )
+            
+            method_to_fish = {
+                "arcface_logits": all_res.arcface_logits,
+                "arcface_centroid": all_res.arcface_centroid,
+                "natural_centroid": all_res.natural_centroid,
+            }
 
             total_annotations += 1
-            is_top1_correct = len(sorted_result) > 0 and str(sorted_result[0].name) == gt_label
-            if is_top1_correct:
-                total_first_correct += 1
 
-            if total_annotations > 0:
-                progress.set_postfix({
-                    "overall_acc": f"{(total_first_correct / total_annotations * 100):.2f}%",
-                    "top1_rate": f"{total_first_correct}/{total_annotations}"
+            for method_key, fish_res in method_to_fish.items():
+                names, accuracy = _sorted_names_accuracy(fish_res)
+                # Check if the top-1 prediction matches the ground truth
+                is_top1_correct = len(names) > 0 and names[0] == gt_label
+                if is_top1_correct:
+                    total_first_correct[method_key] += 1
+
+                results_by_method[method_key].append({
+                    "image_id": image_id,
+                    "drawn_fish_id": drawn_fish_id,
+                    "ann_id": ann_id,
+                    "gt_label": gt_label,
+                    "names": names,
+                    "accuracy": accuracy,
+                    "state": "",
                 })
-            
-            results.append({
-                "image_id": image_id,
-                "drawn_fish_id": drawn_fish_id,
-                "ann_id": ann_id,
-                "gt_label": gt_label,
-                "names": names,
-                "accuracy": accuracy,
-            })
 
-output_path = Path("inference_results_v10.json")
-output_path.write_text(json.dumps(results, ensure_ascii=False, indent=2))
-print(f"Saved {len(results)} annotations to {output_path}")
+            # Update progress bar statistics
+            if total_annotations > 0:
+                c = total_annotations
+                progress.set_postfix({
+                    "logits": f"{total_first_correct['arcface_logits'] / c * 100:.1f}%",
+                    "af_ctr": f"{total_first_correct['arcface_centroid'] / c * 100:.1f}%",
+                    "nat_ctr": f"{total_first_correct['natural_centroid'] / c * 100:.1f}%",
+                })
+
+# Save results to JSON files
+for method_key, out_path in OUTPUT_PATHS.items():
+    rows = results_by_method[method_key]
+    out_path.write_text(json.dumps(rows, ensure_ascii=False, indent=2))
+    n = total_annotations
+    acc_pct = (total_first_correct[method_key] / n * 100) if n else 0.0
+    print(f"Saved {len(rows)} annotations to {out_path} (top-1: {acc_pct:.2f}%)")
