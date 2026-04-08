@@ -21,42 +21,45 @@ from pytorch_metric_learning import losses, miners
 
 
 # =============================================================================
-# Focal Loss - for class imbalance
+# Corrected Focal Loss
 # =============================================================================
-
 class FocalLoss(nn.Module):
-    """
-    Focal Loss for handling class imbalance in fine-grained classification.
-    
-    Reference: "Focal Loss for Dense Object Detection" (Lin et al., 2017)
-    
-    Args:
-        alpha: Weighting factor for rare classes (default: 0.25)
-        gamma: Focusing parameter - higher values focus more on hard examples (default: 2.0)
-        label_smoothing: Label smoothing factor (default: 0.0)
-        reduction: 'mean', 'sum', or 'none'
-    """
     def __init__(
         self, 
-        alpha: float = 0.25, 
+        alpha = 0.25, 
         gamma: float = 2.0, 
         label_smoothing: float = 0.0,
         reduction: str = 'mean'
     ):
         super().__init__()
-        self.alpha = alpha
         self.gamma = gamma
         self.label_smoothing = label_smoothing
         self.reduction = reduction
-        
+
+        if isinstance(alpha, torch.Tensor):
+            self.register_buffer('alpha', alpha.float())
+        elif isinstance(alpha, (list, tuple)):
+            self.register_buffer('alpha', torch.tensor(alpha, dtype=torch.float32))
+        else:
+            self.register_buffer('alpha', torch.tensor(float(alpha)))
+
     def forward(self, logits: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
-        ce_loss = F.cross_entropy(
-            logits, targets, 
-            reduction='none',
-            label_smoothing=self.label_smoothing
-        )
-        pt = torch.exp(-ce_loss)
-        focal_loss = self.alpha * (1 - pt) ** self.gamma * ce_loss
+        # 1. Compute the TRUE probability (pt) WITHOUT label_smoothing!
+        with torch.no_grad():
+            log_pt = -F.cross_entropy(logits, targets, reduction='none', label_smoothing=0.0)
+            pt = torch.exp(log_pt)
+
+        # 2. Compute the CE loss (with smoothing applied if needed)
+        ce_loss = F.cross_entropy(logits, targets, reduction='none', label_smoothing=self.label_smoothing)
+
+        # 3. Apply class weights
+        if self.alpha.ndim > 0 and self.alpha.numel() > 1:
+            alpha_t = self.alpha[targets]
+        else:
+            alpha_t = self.alpha
+
+        # 4. Assemble the proper Focal Loss
+        focal_loss = alpha_t * (1 - pt) ** self.gamma * ce_loss
         
         if self.reduction == 'mean':
             return focal_loss.mean()
@@ -89,9 +92,13 @@ class CombinedLoss(nn.Module):
         label_smoothing: float = 0.0,
         metric_loss_type: str = 'threshold_consistent',
         miner_type: str = 'batch_hard',
+        class_weights: Optional[torch.Tensor] = None,
     ):
         super().__init__()
-        self.arcface_criterion = nn.CrossEntropyLoss(label_smoothing=label_smoothing)
+        self.arcface_criterion = nn.CrossEntropyLoss(
+            label_smoothing=label_smoothing,
+            weight=class_weights,
+        )
         
         # Select metric loss
         if metric_loss_type == 'threshold_consistent':
@@ -141,41 +148,87 @@ class CombinedLoss(nn.Module):
         total_loss = self.arcface_weight * arcface_loss + self.metric_weight * metric_loss
         return total_loss
 
-
-# =============================================================================
-# Improved CombinedLoss V2
-# =============================================================================
-
-class CombinedLossV2(nn.Module):
+class CombinedLossV3(nn.Module):
     """
-    Improved combined loss with Focal Loss and better metric learning.
-    
-    Components:
-    1. Focal Loss on ArcFace logits (handles class imbalance)
-    2. Multi-Similarity Loss with MS-Miner (better hard negative mining)
-    3. Optional: Cross-batch memory for larger effective batch size
-    
-    Args:
-        arcface_weight: Weight for Focal/CE loss
-        metric_weight: Weight for metric learning loss
-        focal_weight: Additional weight for pure focal loss component
-        label_smoothing: Label smoothing for losses
-        focal_gamma: Gamma parameter for focal loss (higher = focus more on hard examples)
-        use_focal: Whether to use Focal Loss instead of CE
-        metric_loss_type: 'multi_similarity', 'circle', 'supcon'
-        use_cross_batch_memory: Enable cross-batch memory for metric loss
-        memory_size: Size of cross-batch memory
-        embedding_dim: Embedding dimension (required if use_cross_batch_memory=True)
+    Production version:
+    ✔ ArcFace + CrossEntropy (NO smoothing)
+    ✔ MultiSimilarity Loss
+    ✔ CrossBatchMemory (miner correctly passed through)
     """
     def __init__(
         self,
-        arcface_weight: float = 0.6,
+        num_classes: int,
+        arcface_weight: float = 1.0,
+        metric_weight: float = 0.15,
+        metric_loss_type: str = 'multi_similarity',
+        miner_type: str = 'multi_similarity',
+        use_cross_batch_memory: bool = True,
+        memory_size: int = 4096,
+        embedding_dim: int = 512,
+        class_weights: Optional[torch.Tensor] = None,
+    ):
+        super().__init__()
+        self.arcface_weight = arcface_weight
+        self.metric_weight = metric_weight
+
+        # 1. Classification (ArcFace -> CE without smoothing)
+        self.classification_loss = nn.CrossEntropyLoss(label_smoothing=0.0, weight=class_weights)
+
+        # 2. Metric Loss
+        if metric_loss_type == 'circle':
+            base_metric = losses.CircleLoss(m=0.25, gamma=80)
+        elif metric_loss_type == 'proxy_anchor':
+            base_metric = losses.ProxyAnchorLoss(num_classes=num_classes, embedding_size=embedding_dim)
+            use_cross_batch_memory = False # ProxyAnchor is incompatible with XBM
+        else:
+            base_metric = losses.MultiSimilarityLoss(alpha=2.0, beta=50.0, base=0.5)
+
+        # 3. Miner
+        if miner_type == 'batch_hard':
+            miner = miners.BatchHardMiner()
+        elif miner_type == 'none':
+            miner = None
+        else:
+            miner = miners.MultiSimilarityMiner(epsilon=0.1)
+
+        # 4. Cross-Batch Memory
+        if use_cross_batch_memory:
+            self.metric_loss = losses.CrossBatchMemory(
+                loss=base_metric,
+                embedding_size=embedding_dim,
+                memory_size=memory_size,
+                miner=miner # Passing miner INTO the memory!
+            )
+            self.miner = None # Clearing the external miner
+        else:
+            self.metric_loss = base_metric
+            self.miner = miner
+
+    def forward(self, embeddings, arcface_logits, labels, **kwargs):
+        loss_arc = self.classification_loss(arcface_logits, labels)
+
+        if self.miner is not None:
+            hard_pairs = self.miner(embeddings, labels)
+            loss_metric = self.metric_loss(embeddings, labels, indices_tuple=hard_pairs)
+        else:
+            loss_metric = self.metric_loss(embeddings, labels)
+
+        total = self.arcface_weight * loss_arc + self.metric_weight * loss_metric
+        return total, loss_arc.detach(), loss_metric.detach()
+
+
+# =============================================================================
+# Fixed CombinedLoss V2
+# =============================================================================
+class CombinedLossV2(nn.Module):
+    def __init__(
+        self,
+        arcface_weight: float = 1.0,
         metric_weight: float = 0.3,
-        focal_weight: float = 0.1,
-        label_smoothing: float = 0.1,
+        label_smoothing: float = 0.0,
+        use_focal: bool = False, # Recommend False for ArcFace
         focal_gamma: float = 2.0,
-        focal_alpha: float = 0.25,
-        use_focal: bool = True,
+        focal_alpha = 0.25,
         metric_loss_type: str = 'multi_similarity',
         miner_type: str = 'multi_similarity',
         use_cross_batch_memory: bool = False,
@@ -184,102 +237,90 @@ class CombinedLossV2(nn.Module):
     ):
         super().__init__()
         
-        # Classification loss
+        # 1. Classification loss (ArcFace)
         if use_focal:
             self.classification_loss = FocalLoss(
-                alpha=focal_alpha,
-                gamma=focal_gamma,
-                label_smoothing=label_smoothing,
+                alpha=focal_alpha, gamma=focal_gamma, label_smoothing=label_smoothing
             )
         else:
             self.classification_loss = nn.CrossEntropyLoss(label_smoothing=label_smoothing)
         
-        # Additional focal component for tail classes
-        self.focal_loss = FocalLoss(
-            alpha=focal_alpha,
-            gamma=focal_gamma,
-            label_smoothing=0.0,  # No smoothing for pure focal
-        ) if focal_weight > 0 else None
-        
-        # Metric learning loss
+        # 2. Setup Miner
+        if miner_type == 'multi_similarity':
+            self.miner = miners.MultiSimilarityMiner(epsilon=0.1)
+        elif miner_type == 'batch_hard':
+            self.miner = miners.BatchHardMiner()
+        else:
+            self.miner = None
+
+        # 3. Setup Metric Loss
         if metric_loss_type == 'multi_similarity':
-            base_metric_loss = losses.MultiSimilarityLoss(
-                alpha=2.0,
-                beta=50.0,
-                base=0.5,
-            )
+            base_metric_loss = losses.MultiSimilarityLoss(alpha=2.0, beta=50.0, base=0.5)
         elif metric_loss_type == 'circle':
             base_metric_loss = losses.CircleLoss(m=0.25, gamma=80)
-        elif metric_loss_type == 'supcon':
-            base_metric_loss = losses.SupConLoss(temperature=0.07)
-        elif metric_loss_type == 'ntxent':
-            base_metric_loss = losses.NTXentLoss(temperature=0.07)
         else:
             base_metric_loss = losses.ThresholdConsistentMarginLoss()
         
-        # Optionally wrap with cross-batch memory
+        # 4. Cross-Batch Memory (proper integration)
+        self.use_cross_batch_memory = use_cross_batch_memory
         if use_cross_batch_memory:
             self.metric_loss = losses.CrossBatchMemory(
                 loss=base_metric_loss,
                 embedding_size=embedding_dim,
                 memory_size=memory_size,
+                miner=self.miner # <-- Now the miner runs inside the memory!
             )
+            self.miner = None # Nullify the external miner to avoid double mining
         else:
             self.metric_loss = base_metric_loss
         
-        # Miner
-        if miner_type == 'multi_similarity':
-            self.miner = miners.MultiSimilarityMiner(epsilon=0.1)
-        elif miner_type == 'batch_hard':
-            self.miner = miners.BatchHardMiner()
-        elif miner_type == 'none':
-            self.miner = None
-        else:
-            self.miner = miners.MultiSimilarityMiner(epsilon=0.1)
-        
         self.arcface_weight = arcface_weight
         self.metric_weight = metric_weight
-        self.focal_weight = focal_weight
-        self.use_cross_batch_memory = use_cross_batch_memory
 
-    def forward(
-        self, 
-        embeddings: torch.Tensor, 
-        arcface_logits: torch.Tensor, 
-        labels: torch.Tensor,
-        raw_logits: Optional[torch.Tensor] = None,
-    ) -> torch.Tensor:
-        """
-        Args:
-            embeddings: Normalized embeddings [B, D]
-            arcface_logits: Logits with ArcFace margin applied [B, num_classes]
-            labels: Ground truth labels [B]
-            raw_logits: Optional raw logits without margin (for focal loss)
-        """
-        # Main classification loss on ArcFace logits
+    def forward(self, embeddings: torch.Tensor, arcface_logits: torch.Tensor, labels: torch.Tensor, **kwargs) -> torch.Tensor:
+        # 1. ArcFace Loss
         loss_arc = self.classification_loss(arcface_logits, labels)
         
-        # Metric loss
-        if self.miner is not None and not self.use_cross_batch_memory:
+        # 2. Metric Loss
+        if self.miner is not None:
+            # When XBM is disabled, use classic mining
             hard_pairs = self.miner(embeddings, labels)
             loss_metric = self.metric_loss(embeddings, labels, indices_tuple=hard_pairs)
         else:
+            # When XBM is enabled, it handles mining internally
             loss_metric = self.metric_loss(embeddings, labels)
         
-        total = self.arcface_weight * loss_arc + self.metric_weight * loss_metric
-        
-        # Additional focal loss component on raw logits
-        if self.focal_loss is not None and self.focal_weight > 0:
-            logits_for_focal = raw_logits if raw_logits is not None else arcface_logits
-            loss_focal = self.focal_loss(logits_for_focal, labels)
-            total = total + self.focal_weight * loss_focal
-        
-        return total
+        return self.arcface_weight * loss_arc + self.metric_weight * loss_metric
 
 
 # =============================================================================
 # Factory function for creating loss functions
 # =============================================================================
+
+def compute_class_weights(targets, num_classes: int, smoothing: float = 0.1) -> torch.Tensor:
+    """
+    Compute inverse-frequency per-class weights for focal loss.
+    
+    Args:
+        targets: List or tensor of integer labels
+        num_classes: Total number of classes
+        smoothing: Laplace smoothing to avoid div-by-zero for missing classes
+    
+    Returns:
+        Tensor of shape [num_classes] with balanced weights (mean = 1.0)
+    """
+    if isinstance(targets, torch.Tensor):
+        targets = targets.tolist()
+    
+    counts = torch.zeros(num_classes)
+    for t in targets:
+        counts[int(t)] += 1
+    
+    counts = counts + smoothing
+    weights = 1.0 / counts
+    weights = weights / weights.mean()
+    return weights
+
 
 def create_loss_function(
     loss_type: str = 'combined',
@@ -295,6 +336,7 @@ def create_loss_function(
     miner_type: str = 'batch_hard',
     use_cross_batch_memory: bool = False,
     memory_size: int = 4096,
+    class_weights: Optional[torch.Tensor] = None,
 ) -> nn.Module:
     """
     Factory function to create loss functions based on configuration.
@@ -308,15 +350,20 @@ def create_loss_function(
         focal_weight: Weight for additional focal loss
         label_smoothing: Label smoothing factor
         focal_gamma: Gamma for focal loss
-        focal_alpha: Alpha for focal loss
+        focal_alpha: Alpha or per-class weight tensor for focal loss.
+                     When class_weights is provided, it overrides this.
         metric_loss_type: Type of metric loss
         miner_type: Type of hard negative miner
         use_cross_batch_memory: Enable cross-batch memory
         memory_size: Size of cross-batch memory
+        class_weights: Optional per-class weight tensor [num_classes] from
+                       compute_class_weights(). Replaces scalar focal_alpha.
     
     Returns:
         Configured loss function module
     """
+    effective_alpha = class_weights if class_weights is not None else focal_alpha
+    
     if loss_type == 'combined':
         return CombinedLoss(
             arcface_weight=arcface_weight,
@@ -324,6 +371,7 @@ def create_loss_function(
             label_smoothing=label_smoothing,
             metric_loss_type=metric_loss_type,
             miner_type=miner_type,
+            class_weights=class_weights,
         )
     
     elif loss_type == 'combined_v2':
@@ -333,7 +381,7 @@ def create_loss_function(
             focal_weight=focal_weight,
             label_smoothing=label_smoothing,
             focal_gamma=focal_gamma,
-            focal_alpha=focal_alpha,
+            focal_alpha=effective_alpha,
             use_focal=True,
             metric_loss_type=metric_loss_type,
             miner_type=miner_type,
@@ -341,7 +389,17 @@ def create_loss_function(
             memory_size=memory_size,
             embedding_dim=embedding_dim,
         )
-    
+    elif loss_type == 'combined_v3':
+        return CombinedLossV3(
+            num_classes=num_classes,
+            arcface_weight=arcface_weight,
+            metric_weight=metric_weight,
+            metric_loss_type='multi_similarity',
+            miner_type='multi_similarity',
+            use_cross_batch_memory=True,
+            embedding_dim=embedding_dim,
+            class_weights=class_weights,
+        )
     elif loss_type == 'focal_only':
         return FocalLoss(
             alpha=focal_alpha,
@@ -440,69 +498,3 @@ class WrapperPNPLoss(nn.Module):
     def forward(self, feats, labels):
         loss = self.loss_func(feats, labels)
         return loss
-
-
-# =============================================================================
-# MixUp utilities
-# =============================================================================
-
-def mixup_data(
-    x: torch.Tensor, 
-    y: torch.Tensor, 
-    alpha: float = 0.4,
-    device: Optional[torch.device] = None,
-) -> tuple:
-    """
-    MixUp data augmentation.
-    
-    Args:
-        x: Input images [B, C, H, W]
-        y: Labels [B]
-        alpha: Beta distribution parameter (higher = more mixing)
-        device: Device for tensors
-    
-    Returns:
-        mixed_x: Mixed images
-        y_a: Original labels
-        y_b: Shuffled labels
-        lam: Mixing coefficient
-    """
-    import numpy as np
-    
-    if alpha > 0:
-        lam = np.random.beta(alpha, alpha)
-    else:
-        lam = 1.0
-    
-    batch_size = x.size(0)
-    if device is None:
-        device = x.device
-    
-    index = torch.randperm(batch_size, device=device)
-    mixed_x = lam * x + (1 - lam) * x[index]
-    y_a, y_b = y, y[index]
-    
-    return mixed_x, y_a, y_b, lam
-
-
-def mixup_criterion(
-    criterion: nn.Module,
-    pred: torch.Tensor,
-    y_a: torch.Tensor,
-    y_b: torch.Tensor,
-    lam: float,
-) -> torch.Tensor:
-    """
-    Compute MixUp loss.
-    
-    Args:
-        criterion: Loss function
-        pred: Model predictions
-        y_a: Original labels
-        y_b: Shuffled labels
-        lam: Mixing coefficient
-    
-    Returns:
-        Mixed loss
-    """
-    return lam * criterion(pred, y_a) + (1 - lam) * criterion(pred, y_b)
