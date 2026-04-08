@@ -154,3 +154,9 @@ dmypy.json
 cython_debug/
 /data/
 /data/cache/
+
+output.png
+*.tsv
+*.tfevents
+notebooks/reranker_comparison.png
+notebooks/viz_Abramis_brama_hdbscan.png
