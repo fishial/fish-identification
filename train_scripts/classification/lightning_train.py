@@ -93,7 +93,7 @@ from module.classification_package.src.lightning_trainer import (
     ImageEmbeddingTrainerViT,
 )
 from module.classification_package.src.loss_functions import compute_class_weights
-from module.classification_package.src.data.module.v2 import ImageEmbeddingDataModule
+from module.classification_package.src.datamodule import ImageEmbeddingDataModule
 from module.classification_package.src.host_memory_monitor import HostMemoryMonitorCallback
 from module.classification_package.src.auto_tuner import (
     AutoTuner,
