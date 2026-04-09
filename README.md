@@ -16,7 +16,7 @@ This repository contains the official training and validation scripts for the **
 
 ## 🗺️ Interactive 3D Embedding Viewer
 
-> **[🔬 Open Embedding Space Explorer →](https://github.com/fishial/fish-identification/static/fishial_viz.html)**
+> **[🔬 Open Embedding Space Explorer →](https://github.com/fishial/fish-identification/static/index.html)**
 
 An interactive browser-based tool to explore the classification model's embedding space in 3D. No installation required — runs entirely in the browser.
 
