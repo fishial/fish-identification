@@ -130,7 +130,8 @@ The following checkpoints are organized by task. TorchScript-ready artifacts are
 
 | Model | Notes | Download |
 | --- | --- | --- |
-| **⭐ beitv2_base_patch16_224 (775 classes)** | Embedding size 512; TorchScript export | [download](https://storage.googleapis.com/fishial-ml-resources/classification_model_v0.10.zip) |
+| **⭐  DinoV2-224 + ViT Pooling 3 head, subcenter  (866 classes)** | Embedding size 768; TorchScript export | [download](https://storage.googleapis.com/fishial-ml-resources/classification_model_v0.10.2.zip) |
+| beitv2_base_patch16_224 (775 classes) | Embedding size 512; TorchScript export | [download](https://storage.googleapis.com/fishial-ml-resources/classification_model_v0.10.zip) |
 | beitv2_base_patch16_224 (640 classes) | Embedding 512; previous TorchScript pack | [download](https://storage.googleapis.com/fishial-ml-resources/classification_rectangle_v9-3.zip) |
 | ConvNeXt Tiny (640 classes) | Embedding 256; TorchScript | [download](https://storage.googleapis.com/fishial-ml-resources/classification_rectangle_v9-2.zip) |
 | ConvNeXt Tiny (426 classes) | Embedding 128; TorchScript | [download](https://storage.googleapis.com/fishial-ml-resources/classification_rectangle_v7-1.zip) |
