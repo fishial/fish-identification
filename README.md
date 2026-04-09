@@ -3,7 +3,7 @@
 [![Project Website](https://img.shields.io/badge/Website-Fishial.ai-blue.svg)](https://www.fishial.ai)
 [![Demo App](https://img.shields.io/badge/Demo-Web%20Application-green.svg)](https://portal.fishial.ai/search/by-fishial-recognition)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://choosealicense.com/licenses/mit/)
-
+[![Embedding Viewer](https://img.shields.io/badge/Viewer-3D%20Embedding%20Space-purple.svg)](https://YOUR_GITHUB_USERNAME.github.io/YOUR_REPO_NAME/)
 <a target="_blank" href="https://colab.research.google.com/drive/1nKJ0V1sBLgfNJaCTQmuqUV1ybrx1m7qI?usp=sharing">
   <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
 </a>
@@ -12,11 +12,31 @@
 
 This repository contains the official training and validation scripts for the **Fishial.ai** fish segmentation, detection, and classification models.
 
+---
+
+## 🗺️ Interactive 3D Embedding Viewer
+
+> **[🔬 Open Embedding Space Explorer →](https://github.com/fishial/fish-identification/static/fishial_viz.html)**
+
+An interactive browser-based tool to explore the classification model's embedding space in 3D. No installation required — runs entirely in the browser.
+
+**Features:**
+- Browse all **866 fish species** projected into 3D via UMAP
+- Select any species as a target and instantly see its **top-N nearest neighbours**
+- **Manually compare** up to 5 species side-by-side with similarity scores
+- Built with Plotly — fully rotatable, zoomable 3D scene
+
+> The viewer is generated from the latest DinoV2 + ViT model checkpoint and stores only the top-10 neighbours per centroid (~3 MB total).
+
+---
+
 ## 🚀 Getting Started
 
 The easiest way to get started is by using our Google Colab Notebook. It allows you to run segmentation and classification models directly in your browser, using Google's cloud infrastructure or your own local machine.
 
 * **[🚀 Open in Google Colab](https://colab.research.google.com/drive/1nKJ0V1sBLgfNJaCTQmuqUV1ybrx1m7qI?usp=sharing)**
+
+---
 
 ## 🛠️ Local Installation
 
@@ -26,11 +46,11 @@ To run the scripts on your own machine, follow these steps.
 ```bash
 git clone <repository-url>
 cd <repository-directory>
-````
+```
 
 **2. Install dependencies:**
-Make sure you have Python 3.x installed.
 
+Make sure you have Python 3.x installed.
 ```bash
 pip3 install -r requirements.txt
 ```
@@ -39,42 +59,37 @@ pip3 install -r requirements.txt
 - `python3 --version` should report Python 3.10 or newer.
 - Use the pinned dependencies in `requirements.txt` and recreate your virtual environment if you switch Python versions.
 
+---
+
 ## ⚙️ How to Run Scripts
 
 First, make the shell scripts executable:
-
 ```bash
 chmod +x segmentation.sh classification.sh object_detection.sh
 ```
 
 ### Segmentation
-
 ```bash
 ./segmentation.sh -c <your_coco_file> -i <your_images_dir> -d <your_segmentation_ds_name> -s <your_save_dir>
 ```
-
   - `-c`: Path to your COCO annotations file.
   - `-i`: Path to the directory containing your images.
   - `-d`: Name for your segmentation dataset.
   - `-s`: Directory where the trained model will be saved.
 
 ### Classification
-
 ```bash
 ./classification.sh -p <your_classif_images_dir> -i <your_classif_input_dir> -a <your_annotation_file> -n <your_classification_ds_name>
 ```
-
   - `-p`: Path to the classification images directory.
   - `-i`: Path to the classification input directory.
   - `-a`: Path to your annotation file.
   - `-n`: Name for your classification dataset.
 
 ### Object Detection (YOLO)
-
 ```bash
 ./object_detection.sh -d <your_detection_ds> -o <your_yolo_output_dir> -n <num_classes> -y <data_yaml> -p <project_dir> -r <run_name>
 ```
-
   - `-d`: Your detection dataset.
   - `-o`: Output directory for YOLO results.
   - `-n`: Number of classes.
@@ -82,30 +97,30 @@ chmod +x segmentation.sh classification.sh object_detection.sh
   - `-p`: Project directory.
   - `-r`: Name for the specific run.
 
+---
+
 ## 📂 Key Project Files
 
 Here's a breakdown of the most important scripts and modules in this project.
 
 ### Training Scripts
-
-  * [`train_scripts/classification/auto_train_cross.py`](https://www.google.com/search?q=train_scripts/classification/auto_train_cross.py): Automatically trains a classification model using the cross-entropy loss function. It saves the best-performing checkpoint based on validation accuracy.
-  * [`train_scripts/classification/auto_train_triplet.py`](https://www.google.com/search?q=train_scripts/classification/auto_train_triplet.py): Trains a classification model using Triplet or Quadruplet loss. It saves the best checkpoint based on the k-metric on the validation set.
-  * [`train_scripts/segmentation/train.py`](https://www.google.com/search?q=train_scripts/segmentation/train.py): A basic script to train a segmentation model using the Detectron2 API.
-  * [`train_scripts/segmentation/train_copy_paste.py`](https://www.google.com/search?q=train_scripts/segmentation/train_copy_paste.py): Trains a segmentation model using Detectron2 with the "Copy-Paste" data augmentation technique.
+  * [`train_scripts/classification/auto_train_cross.py`](train_scripts/classification/auto_train_cross.py): Automatically trains a classification model using the cross-entropy loss function. It saves the best-performing checkpoint based on validation accuracy.
+  * [`train_scripts/classification/auto_train_triplet.py`](train_scripts/classification/auto_train_triplet.py): Trains a classification model using Triplet or Quadruplet loss. It saves the best checkpoint based on the k-metric on the validation set.
+  * [`train_scripts/segmentation/train.py`](train_scripts/segmentation/train.py): A basic script to train a segmentation model using the Detectron2 API.
+  * [`train_scripts/segmentation/train_copy_paste.py`](train_scripts/segmentation/train_copy_paste.py): Trains a segmentation model using Detectron2 with the "Copy-Paste" data augmentation technique.
 
 ### Helper Notebooks & Scripts
-
-  * [`helper/ExportModelToTorchscript.ipynb`](https://www.google.com/search?q=helper/ExportModelToTorchscript.ipynb): A Jupyter Notebook to convert PyTorch classification models and Detectron2 segmentation models to the TorchScript format for optimized deployment.
-  * [`helper/classification/CreateDataBaseTensor.py`](https://www.google.com/search?q=helper/classification/CreateDataBaseTensor.py): Generates an embedding tensor from a trained classification network. This tensor is used for efficient inference.
-  * [`helper/classification/CreateDatasetAndTrain.ipynb`](https://www.google.com/search?q=helper/classification/CreateDatasetAndTrain.ipynb): A script to create training/testing datasets from a Fishial COCO export and subsequently train a network.
+  * [`helper/ExportModelToTorchscript.ipynb`](helper/ExportModelToTorchscript.ipynb): A Jupyter Notebook to convert PyTorch classification models and Detectron2 segmentation models to the TorchScript format for optimized deployment.
+  * [`helper/classification/CreateDataBaseTensor.py`](helper/classification/CreateDataBaseTensor.py): Generates an embedding tensor from a trained classification network. This tensor is used for efficient inference.
+  * [`helper/classification/CreateDatasetAndTrain.ipynb`](helper/classification/CreateDatasetAndTrain.ipynb): A script to create training/testing datasets from a Fishial COCO export and subsequently train a network.
+  * [`helper/classification/EmbeddingViewer.py`](helper/classification/EmbeddingViewer.py): Jupyter-based interactive 3D embedding space explorer. Generates the standalone HTML viewer above.
 
 ### Core Modules
+  * [`module/classification_package/src/model.py`](module/classification_package/src/model.py) & [`utils.py`](module/classification_package/src/utils.py): Core implementation of the classification pipeline.
 
-  * [`module/classification_package/src/model.py`](https://www.google.com/search?q=module/classification_package/src/model.py) & [`.../utils.py`](https://www.google.com/search?q=module/classification_package/src/utils.py): These files contain the core implementation of the classification pipeline.
+---
 
------
-
-## 🧭 What’s Inside
+## 🧭 What's Inside
 
 The repository combines segmentation, detection, and classification tooling with helper notebooks and export utilities:
 
@@ -113,6 +128,20 @@ The repository combines segmentation, detection, and classification tooling with
 - **Object detection**: YOLO training, validation, and inference helpers focused on bounding-box detection.
 - **Classification**: Cross-entropy and metric-based training scripts plus inference helpers that produce class embeddings.
 - **Helpers & notebooks**: Utility notebooks, embedding database tools, and TorchScript export utilities keep deployment workflows tidy.
+- **Embedding Viewer**: Interactive 3D browser tool for exploring model embedding space and species similarity.
+
+---
+
+## 📊 Model Performance
+
+| Task | Model | Classes | Accuracy |
+|---|---|---|---|
+| Classification | DinoV2 + ViT (⭐ latest) | 866 | **93.22%** |
+| Classification | BEiTv2 | 775 | — |
+| Detection | YOLOv26 (⭐ latest) | — | — |
+| Segmentation | FPN + ResNet18 (⭐ latest) | — | — |
+
+---
 
 ## 📦 Pre-trained Models
 
@@ -130,7 +159,7 @@ The following checkpoints are organized by task. TorchScript-ready artifacts are
 
 | Model | Notes | Download |
 | --- | --- | --- |
-| **⭐  DinoV2-224 + ViT Pooling 3 head, subcenter  (866 classes)** | Embedding size 768; TorchScript export | [download](https://storage.googleapis.com/fishial-ml-resources/classification_model_v0.10.2.zip) |
+| **⭐ DinoV2-224 + ViT Pooling 3 head, subcenter (866 classes)** | Embedding size 768; TorchScript export | [download](https://storage.googleapis.com/fishial-ml-resources/classification_model_v0.10.2.zip) |
 | beitv2_base_patch16_224 (775 classes) | Embedding size 512; TorchScript export | [download](https://storage.googleapis.com/fishial-ml-resources/classification_model_v0.10.zip) |
 | beitv2_base_patch16_224 (640 classes) | Embedding 512; previous TorchScript pack | [download](https://storage.googleapis.com/fishial-ml-resources/classification_rectangle_v9-3.zip) |
 | ConvNeXt Tiny (640 classes) | Embedding 256; TorchScript | [download](https://storage.googleapis.com/fishial-ml-resources/classification_rectangle_v9-2.zip) |
@@ -153,16 +182,14 @@ The following checkpoints are organized by task. TorchScript-ready artifacts are
 | MaskRCNN Fish Segmentation (Updated 15.11.2022) | Older Detectron2 checkpoint | [download](https://storage.googleapis.com/fishial-ml-resources/model_15_11_2022.pth) |
 | MaskRCNN Fish Segmentation (Updated 29.06.2022) | Legacy checkpoint | [download](https://storage.googleapis.com/fishial-ml-resources/models_29.06.2022/model_0259999.pth) |
 
------
+---
 
-### Classification Model
+### Classification Model Labels
 
 A JSON file containing the names of all fish classes recognized by the latest model can be found here: **[labels.json](labels.json)**.
 
------
+---
 
 ## 📜 License
 
 This project is licensed under the MIT License. See the [LICENSE](https://choosealicense.com/licenses/mit/) file for details.
-
-```
